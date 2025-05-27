@@ -34,13 +34,13 @@ Here are my initial thoughts on an actual implementation.
 ## Setting up the problem
 
 Suppose we have a $n^2 \times n^2$ Sudoku grid with $k$ empty cells, and
-suppose it has a unique solution $x^* \in \mathbb{Z}_{n^2}^k$ describing
+suppose it has a unique solution $`x^* \in \mathbb{Z}_{n^2}^k`$ describing
 how to fill the empty cells.
 We can view our problem as an unstructured search on $\mathbb{Z}_{n^2}^k$,
 represented by a function
 
 $$
-f: \mathbb{Z}_{n^2}^k \to \{0,1\}
+f: \mathbb{Z}_{n^2}^k \to \mathbb{F}_2
 $$
 
 given by $f^{-1}(-1) = \{x^*\}$.
@@ -49,7 +49,10 @@ Suppose $n=2$, so there each cell can take on 4 possible values,
 which can each be represented by 2 qubits.
 
 $$
-|00\rangle, |01\rangle, |10\rangle, |11\rangle
+\lvert 00 \rangle,
+\lvert 01 \rangle,
+\lvert 10 \rangle,
+\lvert 11 \rangle.
 $$
 
 Thus, we are searching the space $(\mathbb{F}_2^2)^k$, where candidate
@@ -72,14 +75,15 @@ or simply $x_i = x_{i1} x_{i0}$.
 Suppose we have an oracle $O$ that performs the transformation
 
 $$
-O |x\rangle |q\rangle = |x\rangle |q \oplus f(x)\rangle.
+O \lvert x \rangle \lvert q \rangle
+= \lvert x \rangle \lvert q \oplus f(x) \rangle.
 $$
 
-Let $|\psi\rangle$ denote the equal superposition state
+Let $\lvert \psi \rangle$ denote the equal superposition state
 
 $$
-|\psi\rangle
-= \frac{1}{\sqrt{N}} \sum_{x \in \mathbb{F}_2^{2k}} |x\rangle,
+\lvert \psi \rangle
+= \frac{1}{\sqrt{N}} \sum_{x \in \mathbb{F}_2^{2k}} \lvert x \rangle,
 $$
 
 where $N = 2^{2k}$.
@@ -89,29 +93,30 @@ Grover's algorithm will proceed as follows.
 **Inputs:**
 
 - oracle $O$
-- $2k+1$ qubits, each in the state $|0\rangle$
+- $2k+1$ qubits, each in the state $\lvert 0 \rangle$
 
 **Outputs:** $x^*$ (with high probability)
 
 **Procedure**
 
-1. Start with the initial state $|0\rangle^{\otimes 2k} |0\rangle$.
+1. Start with the initial state $\lvert 0 \rangle^{\otimes 2k} \lvert 0 \rangle$.
 2. Apply the Hadamard transform $H^{\otimes 2k}$ to the first $2k$ qubits, and $HX$ to the last qubit.
-3. Apply the Grover iteration $G = (2 |\psi\rangle \langle\psi| - I)O$ repeatedly, namely $R \approx \lceil \frac{\pi \sqrt{N}}{4} \rceil$ times.
+3. Apply the Grover iteration $G = (2 \lvert \psi \rangle \langle \psi \rvert - I)O$ repeatedly, namely $R \approx \left\lceil \frac{\pi \sqrt{N}}{4} \right\rceil$ times.
 4. Measure the first $2k$ qubits to obtain $x^*$.
 
 Here are the states as we go through each step.
 
 $$
-\begin{align*}
-|0\rangle^{\otimes 2k} |0\rangle
+\begin{align}
+|0\rangle^{\otimes 2k} \lvert 0 \rangle
 &\xrightarrow{\text{Step 2}}
-|\psi\rangle |-\rangle \\
+\lvert \psi \rangle \lvert - \rangle \\
 &\xrightarrow{\text{Step 3}}
-G^R |\psi\rangle |-\rangle \approx |x^*\rangle |-\rangle \\
+G^R \lvert \psi \rangle \lvert - \rangle
+\approx \lvert x^* \rangle \lvert - \rangle \\
 &\xrightarrow{\text{Step 4}}
 x^*
-\end{align*}
+\end{align}
 $$
 
 ## Considerations
