@@ -3,6 +3,10 @@
 The goal of this project is to create a Qiskit function that takes a
 Sudoku puzzle and ouputs a solution, using Grover's algorithm.
 
+**Note:** I have been struggling to get Github-flavored Markdown to play
+nicely with LaTeX, so some mathematical expressions below may not be
+correctly displayed. I'll try to fix the issues when I have time.
+
 ## Minimum viable project
 
 Here are my requirements for a minimum viable project.
