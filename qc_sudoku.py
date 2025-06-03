@@ -58,7 +58,7 @@ def solve(puzzle: np.array) -> np.array:
     # Run Grover circuit and get output bitstring
     grover_circuit = grover(puzzle, niter)
     output_bitstring = most_likely_state(grover_circuit,
-                                            grover_circuit.qregs[0])
+                                            [i for i in range(nqubits)])
     assert len(output_bitstring) == nqubits
 
     # Convert to list of integers
@@ -312,18 +312,19 @@ def find_blocks_with_nan(puzzle: np.array) -> set:
 ########################################################################
 ########################################################################
 
-def most_likely_state(qc: QuantumCircuit, qr: QuantumRegister) -> str:
+def most_likely_state(qc: QuantumCircuit, qargs: list) -> str:
     """Returns the binary representation of the most likely state.
 
-    Given a quantum circuit `qc` and quantum register `qr`, this
+    Given a quantum circuit `qc` and list `qargs` of qubits, this
     function returns the binary representation of the computational
     basis vector that is most likely to be measured from the given
-    register.
+    qubits.
 
     Parameters
     ----------
     qc : QuantumCircuit
-    qr : QuantumRegister
+    qargs : list
+        List of qubits to be "measured."
 
     Returns
     -------
@@ -335,7 +336,7 @@ def most_likely_state(qc: QuantumCircuit, qr: QuantumRegister) -> str:
     #TODO
     """
     output_state = Statevector(qc)
-    prob_dict = output_state.probability_dict(qr)
+    prob_dict = output_state.probabilities_dict(qargs)
     return max(prob_dict, key=prob_dict.get)
 
 def value_to_ancilla(value: int, nqubits: int) -> Gate:
