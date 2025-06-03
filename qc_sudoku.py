@@ -58,12 +58,12 @@ def solve(puzzle: np.array) -> np.array:
     # Run Grover circuit and get output bitstring
     grover_circuit = grover(puzzle, niter)
     output_bitstring = most_likely_state(grover_circuit,
-        grover_circuit.qregs[0])
+                                            grover_circuit.qregs[0])
     assert len(output_bitstring) == nqubits
 
     # Convert to list of integers
     entry_bitstrings = [output_bitstring[i:i+nqubits_per_entry]
-        for i in range(num_unknown)]
+                        for i in range(num_unknown)]
     entry_ints = [bitstr_to_int(x) for x in entry_bitstrings]
 
     # Use output bitstring to fill in the unsolved puzzle
@@ -156,15 +156,15 @@ def is_sq_matrix(arr: np.array) -> bool:
     """Returns if an array is a square matrix.
     """
     size = arr.size
-    num_rows = math.isqrt(size)
-    return (np.shape == (num_rows,num_rows))
+    nrows = math.isqrt(size)
+    return (np.shape == (nrows,nrows))
 
 def is_sq_dim(arr: np.array) -> bool:
     """Returns if an array (presumably a square matrix) has a square
     number of rows.
     """
-    num_rows = arr.shape[0]
-    return (num_rows == math.isqrt(num_rows)**2)
+    nrows = arr.shape[0]
+    return (nrows == math.isqrt(nrows)**2)
 
 def find_nqubits_per_entry(puzzle: np.array) -> int:
     """Returns the number of (qu)bits needed to represent an entry.
@@ -338,8 +338,102 @@ def most_likely_state(qc: QuantumCircuit, qr: QuantumRegister) -> str:
     prob_dict = output_state.probability_dict(qr)
     return max(prob_dict, key=prob_dict.get)
 
+def value_to_ancilla(value: int, nqubits: int) -> Gate:
+    """Returns a quantum gate that stores the given value in the ancilla
+    register.
+    """
+    bitstr = int_to_bitstr(value, nqubits)
+    qr = AncillaRegister(len(bitstr), name="a")
+    qc = QuantumCircuit(qr, name="Set value")
+    qc.x([qr[i] for i in range(len(bitstr)) if bitstr[i] == "1"])
+
+    return qc.to_gate()
+
+def prepare_known_ancilla(puzzle: np.array) -> Gate:
+    """Returns a quantum gate that prepares the state of the ancilla
+    registers reserved for storing the values of known values.
+
+    The initial sudoku has some empty (unknown) cells and some filled
+    (known) cells.
+    In the `grover` function, the known cells are assigned to ancilla
+    registers.
+    This function stores the value of the known cells in the
+    corresponding ancilla registers.
+
+    Parameters
+    ----------
+    puzzle : np.array
+        n^2 by n^2 array, representing the unsolved puzzle,
+        where an empty cell is np.nan
+
+    Returns
+    -------
+    Gate
+    """
+    num_known = find_num_known(puzzle)
+    nqubits_per_entry = find_nqubits_per_entry(puzzle)
+    nqubits = num_known * nqubits_per_entry
+    qr = QuantumRegister(nqubits, name="a")
+    qc = QuantumCircuit(qr, name="Prepare known values")
+
+    index = 0
+    for x in np.nditer(puzzle):
+        if not np.isnan(x):
+            qc.compose(value_to_ancilla(x, nqubits_per_entry),
+                        qc[index:index+nqubits_per_entry],
+                        inplace=True)
+            index += nqubits_per_entry
+    assert index == nqubits
+
+    return qc.to_gate()
+
+def is_equal(nqubits: int) -> Gate:
+    """Returns a quantum gate that flips if two registers have the
+    same state.
+
+    Parameters
+    ----------
+    nqubits : int
+        Size of each of the two registers
+
+    Returns
+    -------
+    Gate
+
+    Examples
+    --------
+    #TODO
+    """
+    in_qr1 = QuantumRegister(nqubits, name="x")
+    in_qr2 = QuantumRegister(nqubits, name="y")
+    out_qr = AncillaRegister(1, name="out")
+
+    # We need to do `nqubit` comparisons, so we need that many qubits
+    ancilla = AncillaRegister(nqubits, name="a")
+
+    qc = QuantumCircuit(in_qr1, in_qr2, out_qr, ancilla)
+
+    # Store comparisons in ancilla
+    for i in range(nqubits):
+        qc.compose(XOR_gate(),
+                    qubits=[in_qr1[i], in_qr2[i], ancilla[i]],
+                    inplace=True)
+
+    # Flip target_qr iff all ancilla are 1
+    # We are allowed to use multi-controlled X because this function
+    # is used only in the marker oracle
+    qc.mcx(ancilla, out_qr)
+
+    # Uncompute ancilla
+    for i in range(nqubits):
+        qc.compose(XOR_gate(),
+                    qubits=[in_qr1[i], in_qr2[i], ancilla[i]],
+                    inplace=True)
+
+    return qc.to_gate()
+
 ########################################################################
-# Basic gates and circuits
+# Logic gates
 ########################################################################
 
 # Might as well just use Toffoli gate
@@ -416,100 +510,6 @@ def NOR_gate() -> Gate:
     qc.x(target_qr[0])
     return qc.to_gate()
 
-def value_to_ancilla(value: int, nqubits: int) -> Gate:
-    """Returns a quantum gate that stores the given value in the ancilla
-    register.
-    """
-    bitstr = int_to_bitstr(value, nqubits)
-    qr = AncillaRegister(len(bitstr), name="a")
-    qc = QuantumCircuit(qr, name="Set value")
-    qc.x([qr[i] for i in range(len(bitstr)) if bitstr[i] == "1"])
-
-    return qc.to_gate()
-
-def prepare_known_ancilla(puzzle: np.array) -> Gate:
-    """Returns a quantum gate that prepares the state of the ancilla
-    registers reserved for storing the values of known values.
-
-    The initial sudoku has some empty (unknown) cells and some filled
-    (known) cells.
-    In the `grover` function, the known cells are assigned to ancilla
-    registers.
-    This function stores the value of the known cells in the
-    corresponding ancilla registers.
-
-    Parameters
-    ----------
-    puzzle : np.array
-        n^2 by n^2 array, representing the unsolved puzzle,
-        where an empty cell is np.nan
-
-    Returns
-    -------
-    Gate
-    """
-    num_known = find_num_known(puzzle)
-    nqubits_per_entry = find_nqubits_per_entry(puzzle)
-    nqubits = num_known * nqubits_per_entry
-    qr = AncillaRegister(nqubits, name="a")
-    qc = QuantumCircuit(qr, name="Prepare known values")
-
-    index = 0
-    for x in np.nditer(puzzle):
-        if not np.isnan(x):
-            qc.compose(value_to_ancilla(x, nqubits_per_entry),
-                qc[index:index+nqubits_per_entry],
-                inplace=True)
-            index += nqubits_per_entry
-    assert index == nqubits
-
-    return qc.to_gate()
-
-def is_equal(nqubits: int) -> Gate:
-    """Returns a quantum gate that flips if two registers have the
-    same state.
-
-    Parameters
-    ----------
-    nqubits : int
-        Size of each of the two registers
-
-    Returns
-    -------
-    Gate
-
-    Examples
-    --------
-    #TODO
-    """
-    in_qr1 = QuantumRegister(nqubits, name="x")
-    in_qr2 = QuantumRegister(nqubits, name="y")
-    out_qr = AncillaRegister(1, name="out")
-
-    # We need to do `nqubit` comparisons, so we need that many qubits
-    ancilla = AncillaRegister(nqubits, name="a")
-
-    qc = QuantumCircuit(in_qr1, in_qr2, out_qr, ancilla)
-
-    # Store comparisons in ancilla
-    for i in range(nqubits):
-        qc.compose(XOR_gate(),
-            qubits=[in_qr1[i], in_qr2[i], ancilla[i]],
-            inplace=True)
-
-    # Flip target_qr iff all ancilla are 1
-    # We are allowed to use multi-controlled X because this function
-    # is used only in the marker oracle
-    qc.mcx(ancilla, out_qr)
-
-    # Uncompute ancilla
-    for i in range(nqubits):
-        qc.compose(XOR_gate(),
-            qubits=[in_qr1[i], in_qr2[i], ancilla[i]],
-            inplace=True)
-
-    return qc.to_gate()
-
 ########################################################################
 # Gates and circuits for Grover's algorithm (besides the oracle)
 #
@@ -545,6 +545,7 @@ def grover(puzzle: np.array, niter: int) -> QuantumCircuit:
     #TODO
     """
     # Important constants
+    nrows = puzzle.shape[0]
     num_unknown = find_num_unknown(puzzle)
     num_known = find_num_known(puzzle)
     nqubits_per_entry = find_nqubits_per_entry(puzzle)
@@ -555,35 +556,62 @@ def grover(puzzle: np.array, niter: int) -> QuantumCircuit:
 
     # Each unknown cell gets enough qubits
     unknown_regs = [QuantumRegister(nqubits_per_entry,
-        name="unknown{}".format(i))
-        for i in range(num_unknown)]
+                                    name="unknown{}".format(i))
+                    for i in range(num_unknown)]
 
     # Each known cell gets enough qubits
     known_regs = [AncillaRegister(nqubits_per_entry,
-        name="known{}".format(i))
-        for i in range(num_known)]
+                                    name="known{}".format(i))
+                    for i in range(num_known)]
 
     # Rule registers
     # Flip if a sudoku rule is satisfied
     row_regs = [AncillaRegister(1, name="row{}".format(row))
-        for row in rows_with_nan]
+                for row in rows_with_nan]
     col_regs = [AncillaRegister(1, name="col{}".format(col))
-        for col in cols_with_nan]
+                for col in cols_with_nan]
     block_regs = [AncillaRegister(1, name="block{}".format(block))
-        for block in blocks_with_nan]
+                    for block in blocks_with_nan]
 
     # Oracle qubit, which should flip if all rules are satisfied
     oracle_qubit = AncillaRegister(1, name="q")
 
     # Need some ancilla qubits for doing work
-    # In a row, col, or block, there are n entries
-    # We need to check at most (n choose 2) pairs of entries
-    # #TODO implement comparison
-    # ancilla = AncillaRegister()
+    # In a row, col, or block, there are `nrows` entries.
+    # We need to check at most (nrows choose 2) pairs of entries and store
+    # the results in (nrows choose 2) ancilla.
+    ancilla = AncillaRegister(math.comb(nrows, 2), name="a")
 
-    #TODO prepare state with hadamard transform
-    #TODO loop for Grover iteration
-    pass
+    # We also need to `nqubits_per_entry` qubits for `is_equal` to work.
+    work_qr = AncillaRegister(nqubits_per_entry, name="w")
+
+    qc = QuantumCircuit(*unknown_regs,
+                        *known_regs,
+                        *row_regs,
+                        *col_regs,
+                        *block_regs,
+                        oracle_qubit,
+                        ancilla,
+                        work_qr)
+
+    # Prepare state of unknown_regs with hadamard transform
+    qc.h(unknown_regs)
+
+    # Prepare state of known_regs
+    qc.compose(prepare_known_ancilla(puzzle), known_regs, inplace=True)
+
+    for i in range(niter):
+        qc.compose(grover_iteration(puzzle),
+                    qubits = [*unknown_regs,
+                                *known_regs,
+                                *col_regs,
+                                *block_regs,
+                                oracle_qubit,
+                                ancilla,
+                                work_qr],
+                    inplace=True)
+
+    return qc
 
 def grover_iteration(puzzle: np.array) -> Gate:
     """Returns the Grover iteration circuit for the given puzzle.
@@ -611,10 +639,72 @@ def grover_iteration(puzzle: np.array) -> Gate:
     --------
     #TODO
     """
-    #TODO need to know how many registers I need
-    #TODO marker oracle
-    #TODO grover diffuser
-    pass
+    # Important constants
+    nrows = puzzle.shape[0]
+    num_unknown = find_num_unknown(puzzle)
+    num_known = find_num_known(puzzle)
+    nqubits_per_entry = find_nqubits_per_entry(puzzle)
+
+    rows_with_nan = find_rows_with_nan(puzzle)
+    cols_with_nan = find_cols_with_nan(puzzle)
+    blocks_with_nan = find_blocks_with_nan(puzzle)
+
+    # Each unknown cell gets enough qubits
+    unknown_regs = [QuantumRegister(nqubits_per_entry,
+                                    name="unknown{}".format(i))
+                    for i in range(num_unknown)]
+
+    # Each known cell gets enough qubits
+    known_regs = [AncillaRegister(nqubits_per_entry,
+                                    name="known{}".format(i))
+                    for i in range(num_known)]
+
+    # Rule registers
+    # Flip if a sudoku rule is satisfied
+    row_regs = [AncillaRegister(1, name="row{}".format(row))
+                for row in rows_with_nan]
+    col_regs = [AncillaRegister(1, name="col{}".format(col))
+                for col in cols_with_nan]
+    block_regs = [AncillaRegister(1, name="block{}".format(block))
+                    for block in blocks_with_nan]
+
+    # Oracle qubit, which should flip if all rules are satisfied
+    oracle_qubit = AncillaRegister(1, name="q")
+
+    # Need some ancilla qubits for doing work
+    # In a row, col, or block, there are `nrows` entries.
+    # We need to check at most (nrows choose 2) pairs of entries and store
+    # the results in (nrows choose 2) ancilla.
+    ancilla = AncillaRegister(math.comb(nrows, 2), name="a")
+
+    # We also need to `nqubits_per_entry` qubits for `is_equal` to work.
+    work_qr = AncillaRegister(nqubits_per_entry, name="w")
+
+    qc = QuantumCircuit(*unknown_regs,
+                        *known_regs,
+                        *row_regs,
+                        *col_regs,
+                        *block_regs,
+                        oracle_qubit,
+                        ancilla,
+                        work_qr)
+
+    qc.compose(oracle(puzzle),
+                qubits=[*unknown_regs,
+                        *known_regs,
+                        *row_regs,
+                        *col_regs,
+                        *block_regs,
+                        oracle_qubit,
+                        ancilla,
+                        work_qr],
+                inplace=True)
+
+    qc.compose(grover_diffuser(num_unknown * nqubits_per_entry),
+                qubits=[*unknown_regs],
+                inplace=True)
+
+    return qc
 
 def grover_diffuser(nqubits: int) -> Gate:
     """Returns the Grover diffuser circuit on `num_qubits` qubits.
