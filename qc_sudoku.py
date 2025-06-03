@@ -7,6 +7,7 @@ from qiskit.quantum_info import Statevector
 
 import numpy as np
 import math
+from itertools import combinations
 
 ########################################################################
 ########################################################################
@@ -14,7 +15,7 @@ import math
 ########################################################################
 ########################################################################
 
-def solve(puzzle: np.array) -> np.array:
+def solve(puzzle: np.ndarray) -> np.ndarray:
     """Solves a sudoku puzzle using Grover's algorithm.
 
     This function assumes the input is an n^2 by n^2 sudoku puzzle, with
@@ -24,7 +25,7 @@ def solve(puzzle: np.array) -> np.array:
 
     Parameters
     ----------
-    puzzle : np.array
+    puzzle : np.ndarray
         n^2 by n^2 array, representing the unsolved puzzle,
         where an empty cell is np.nan
 
@@ -44,7 +45,7 @@ def solve(puzzle: np.array) -> np.array:
            [3, 1, 0, 2]])
     """
     # Throw out garbage inputs
-    if type(puzzle) != np.array:
+    if type(puzzle) != np.ndarray:
         raise TypeError("Expected a numpy array")
     elif not possibly_sudoku(puzzle):
         raise ValueError("Not a valid sudoku")
@@ -79,7 +80,7 @@ def solve(puzzle: np.array) -> np.array:
 ########################################################################
 #########################################################################
 
-def possibly_sudoku(arr: np.array) -> bool:
+def possibly_sudoku(arr: np.ndarray) -> bool:
     """Returns whether or not the given array is a sudoku puzzle, maybe.
 
     This function checks a few basic facts about the given array.
@@ -152,21 +153,21 @@ def possibly_sudoku(arr: np.array) -> bool:
                 return False
         return True
 
-def is_sq_matrix(arr: np.array) -> bool:
+def is_sq_matrix(arr: np.ndarray) -> bool:
     """Returns if an array is a square matrix.
     """
     size = arr.size
     nrows = math.isqrt(size)
     return (np.shape == (nrows,nrows))
 
-def is_sq_dim(arr: np.array) -> bool:
+def is_sq_dim(arr: np.ndarray) -> bool:
     """Returns if an array (presumably a square matrix) has a square
     number of rows.
     """
     nrows = arr.shape[0]
     return (nrows == math.isqrt(nrows)**2)
 
-def find_nqubits_per_entry(puzzle: np.array) -> int:
+def find_nqubits_per_entry(puzzle: np.ndarray) -> int:
     """Returns the number of (qu)bits needed to represent an entry.
 
     Examples
@@ -182,7 +183,7 @@ def find_nqubits_per_entry(puzzle: np.array) -> int:
     nrows = puzzle.shape[0]
     return math.ceil(math.log2(nrows))
 
-def find_num_unknown(puzzle: np.array) -> int:
+def find_num_unknown(puzzle: np.ndarray) -> int:
     """Returns the number of unknown (i.e. empty) entries in the puzzle.
 
     Examples
@@ -194,7 +195,7 @@ def find_num_unknown(puzzle: np.array) -> int:
     """
     return np.count_nonzero(np.isnan(puzzle))
 
-def find_num_known(puzzle: np.array) -> int:
+def find_num_known(puzzle: np.ndarray) -> int:
     """Returns the number of known (i.e. filled) entries in the puzzle.
 
     Examples
@@ -243,8 +244,8 @@ def int_to_bitstr(value: int, nbits: int) -> str:
         raise ValueError("`num_bits` is too low to represent `value`")
     return bitstr.zfill(nbits)
 
-def find_rows_with_nan(puzzle: np.array) -> set:
-    """Returns the set of row indices for rows with empty cells.
+def find_rows_with_nan(puzzle: np.ndarray) -> tuple:
+    """Returns the tuple of row indices for rows with empty cells.
 
     Examples
     --------
@@ -253,17 +254,17 @@ def find_rows_with_nan(puzzle: np.array) -> set:
     >>> find_rows_with_nan(puzzle)
     (1, 2, 3)
     """
-    rows_with_nan = set()
+    rows_with_nan = []
     index = 0
     for row in puzzle:
         if np.isnan(np.sum(row)):
-            rows_with_nan.add(index)
+            rows_with_nan.append(index)
         index += 1
     assert index == puzzle.shape[0]
-    return rows_with_nan
+    return tuple(rows_with_nan)
 
-def find_cols_with_nan(puzzle: np.array) -> set:
-    """Returns the set of column indices for columns with empty cells.
+def find_cols_with_nan(puzzle: np.ndarray) -> tuple:
+    """Returns the tuple of column indices for columns with empty cells.
 
     Examples
     --------
@@ -272,17 +273,17 @@ def find_cols_with_nan(puzzle: np.array) -> set:
     >>> find_cols_with_nan(puzzle)
     (1, 2, 3)
     """
-    cols_with_nan = set()
+    cols_with_nan = []
     index = 0
     for col in np.transpose(puzzle):
         if np.isnan(np.sum(col)):
-            cols_with_nan.add(index)
+            cols_with_nan.append(index)
         index += 1
     assert index == puzzle.shape[1]
-    return cols_with_nan
+    return tuple(cols_with_nan)
 
-def find_blocks_with_nan(puzzle: np.array) -> set:
-    """Returns the set of block indices for blocks with empty cells.
+def find_blocks_with_nan(puzzle: np.ndarray) -> tuple:
+    """Returns the tuple of block indices for blocks with empty cells.
 
     Examples
     --------
@@ -295,7 +296,7 @@ def find_blocks_with_nan(puzzle: np.array) -> set:
     >>> find_blocks_with_nan(puzzle)
     (0, 1, 2, 3)
     """
-    blocks_with_nan = set()
+    blocks_with_nan = []
     N = puzzle.shape[0]
     n = math.isqrt(N)
     for i in range(N):
@@ -303,8 +304,8 @@ def find_blocks_with_nan(puzzle: np.array) -> set:
         start_col = n*(i-start_row)
         grid = puzzle[start_row:start_row+n, start_col:start_col+n]
         if np.isnan(np.sum(grid)):
-            blocks_with_nan.add(i)
-    return blocks_with_nan
+            blocks_with_nan.append(i)
+    return tuple(blocks_with_nan)
 
 ########################################################################
 ########################################################################
@@ -350,7 +351,7 @@ def value_to_ancilla(value: int, nqubits: int) -> Gate:
 
     return qc.to_gate()
 
-def prepare_known_ancilla(puzzle: np.array) -> Gate:
+def prepare_known_ancilla(puzzle: np.ndarray) -> Gate:
     """Returns a quantum gate that prepares the state of the ancilla
     registers reserved for storing the values of known values.
 
@@ -380,7 +381,7 @@ def prepare_known_ancilla(puzzle: np.array) -> Gate:
     index = 0
     for x in np.nditer(puzzle):
         if not np.isnan(x):
-            qc.compose(value_to_ancilla(x, nqubits_per_entry),
+            qc.compose(value_to_ancilla(int(x), nqubits_per_entry),
                         qc[index:index+nqubits_per_entry],
                         inplace=True)
             index += nqubits_per_entry
@@ -517,7 +518,7 @@ def NOR_gate() -> Gate:
 # The oracle is complicated, so I'll give the oracle its own section.
 ########################################################################
 
-def grover(puzzle: np.array, niter: int) -> QuantumCircuit:
+def grover(puzzle: np.ndarray, niter: int) -> QuantumCircuit:
     """Returns the Grover circuit for the given puzzle.
 
     This function assumes the input is an n^2 by n^2 sudoku puzzle, with
@@ -529,7 +530,7 @@ def grover(puzzle: np.array, niter: int) -> QuantumCircuit:
 
     Parameters
     ----------
-    puzzle : np.array
+    puzzle : np.ndarray
         n^2 by n^2 array, representing the unsolved puzzle,
         where an empty cell is np.nan
     niter : int
@@ -577,7 +578,6 @@ def grover(puzzle: np.array, niter: int) -> QuantumCircuit:
     # Oracle qubit, which should flip if all rules are satisfied
     oracle_qubit = AncillaRegister(1, name="q")
 
-    # Need some ancilla qubits for doing work
     # In a row, col, or block, there are `nrows` entries.
     # We need to check at most (nrows choose 2) pairs of entries and store
     # the results in (nrows choose 2) ancilla.
@@ -614,7 +614,7 @@ def grover(puzzle: np.array, niter: int) -> QuantumCircuit:
 
     return qc
 
-def grover_iteration(puzzle: np.array) -> Gate:
+def grover_iteration(puzzle: np.ndarray) -> Gate:
     """Returns the Grover iteration circuit for the given puzzle.
 
     This function assumes the input is an n^2 by n^2 sudoku puzzle, with
@@ -626,7 +626,7 @@ def grover_iteration(puzzle: np.array) -> Gate:
 
     Parameters
     ----------
-    puzzle : np.array
+    puzzle : np.ndarray
         n^2 by n^2 array, representing the unsolved puzzle,
         where an empty cell is np.nan
 
@@ -672,7 +672,6 @@ def grover_iteration(puzzle: np.array) -> Gate:
     # Oracle qubit, which should flip if all rules are satisfied
     oracle_qubit = AncillaRegister(1, name="q")
 
-    # Need some ancilla qubits for doing work
     # In a row, col, or block, there are `nrows` entries.
     # We need to check at most (nrows choose 2) pairs of entries and store
     # the results in (nrows choose 2) ancilla.
@@ -731,7 +730,7 @@ def grover_diffuser(nqubits: int) -> Gate:
 # The marker oracle
 ########################################################################
 
-def oracle(puzzle: np.array) -> Gate:
+def oracle(puzzle: np.ndarray) -> Gate:
     """Returns the marker oracle for the given puzzle.
 
     This function assumes the input is an n^2 by n^2 sudoku puzzle, with
@@ -744,7 +743,7 @@ def oracle(puzzle: np.array) -> Gate:
 
     Parameters
     ----------
-    puzzle : np.array
+    puzzle : np.ndarray
         n^2 by n^2 array, representing the unsolved puzzle,
         where an empty cell is np.nan
 
@@ -758,7 +757,149 @@ def oracle(puzzle: np.array) -> Gate:
     --------
     #TODO
     """
-    #TODO unknown_register
-    #TODO known_register
-    #TODO oracle_register
+    # Important constants
+    nrows = puzzle.shape[0]
+    nqubits_per_entry = find_nqubits_per_entry(puzzle)
+
+    rows_with_nan = find_rows_with_nan(puzzle)
+    cols_with_nan = find_cols_with_nan(puzzle)
+    blocks_with_nan = find_blocks_with_nan(puzzle)
+
+    unknown_coords = tuple([tuple(x) for x in np.argwhere(np.isnan(puzzle))])
+    known_coords = tuple([tuple(x) for x in np.argwhere(~np.isnan(puzzle))])
+
+    unknown_dict = {unknown_coords[i]: i for i in range(len(unknown_coords))}
+    known_dict = {known_coords[i]: i for i in range(len(known_coords))}
+
+    # Each unknown cell gets enough qubits
+    unknown_regs = [QuantumRegister(nqubits_per_entry,
+                                    name="unknown{}".format(tup))
+                    for tup in unknown_coords]
+
+    # Each known cell gets enough qubits
+    known_regs = [AncillaRegister(nqubits_per_entry,
+                                    name="known{}".format(tup))
+                    for tup in known_coords]
+
+    # Rule registers
+    # Flip if a sudoku rule is satisfied
+    row_regs = [AncillaRegister(1, name="row{}".format(row))
+                for row in rows_with_nan]
+    col_regs = [AncillaRegister(1, name="col{}".format(col))
+                for col in cols_with_nan]
+    block_regs = [AncillaRegister(1, name="block{}".format(block))
+                    for block in blocks_with_nan]
+
+    # Oracle qubit, which should flip if all rules are satisfied
+    oracle_qubit = AncillaRegister(1, name="q")
+
+    # In a row, col, or block, there are `nrows` entries.
+    # We need to check at most (nrows choose 2) pairs of entries and store
+    # the results in (nrows choose 2) ancilla.
+    ancilla = AncillaRegister(math.comb(nrows, 2), name="a")
+
+    # We also need to `nqubits_per_entry` qubits for `is_equal` to work.
+    work_qr = AncillaRegister(nqubits_per_entry, name="w")
+
+    qc = QuantumCircuit(*unknown_regs,
+                        *known_regs,
+                        *row_regs,
+                        *col_regs,
+                        *block_regs,
+                        oracle_qubit,
+                        ancilla,
+                        work_qr)
+
+    # Row registers
+
+    # Keep track of how many ancilla registers we are using
+    index = 0
+
+    # Keep track of row register index
+    row_ireg = 0
+
+    # Look at a row index from rows_with_nan
+    for i in range(len(rows_with_nan)):
+
+        # Look at all pairs of entries in this row
+        for tup in combinations(range(nrows), 2):
+
+            # rows_with_nan tells you irow
+            # tup tells you icol
+            entry1 = (rows_with_nan[i], tup[0])
+            entry2 = (rows_with_nan[i], tup[1])
+
+            # Find corresponding registers of pair
+
+            if entry1 in unknown_coords:
+                entry1_ireg = unknown_dict.get(entry1)
+                if entry2 in unknown_coords:
+                    entry2_ireg = unknown_dict.get(entry2)
+
+                    # Flip ancilla[index] iff pair is not equal
+                    qc.compose(is_equal(nqubits_per_entry),
+                                qubits=[*(unknown_regs[entry1_ireg]),
+                                        *(unknown_regs[entry2_ireg]),
+                                        ancilla[index],
+                                        *work_qr],
+                                inplace=True)
+
+                    qc.x(ancilla[index])
+
+                elif entry2 in known_coords:
+                    entry2_ireg = known_dict.get(entry2)
+
+                    # Flip ancilla[index] iff pair is not equal
+                    qc.compose(is_equal(nqubits_per_entry),
+                                qubits=[*(unknown_regs[entry1_ireg]),
+                                        *(known_regs[entry2_ireg]),
+                                        ancilla[index],
+                                        *work_qr],
+                                inplace=True)
+
+                    qc.x(ancilla[index])
+
+            elif entry1 in known_coords:
+                entry1_ireg = known_dict.get(entry1)
+                if entry2 in unknown_coords:
+                    entry2_ireg = unknown_dict.get(entry2)
+
+                    # Flip ancilla[index] iff pair is not equal
+                    qc.compose(is_equal(nqubits_per_entry),
+                                qubits=[*(known_regs[entry1_ireg]),
+                                        *(unknown_regs[entry2_ireg]),
+                                        ancilla[index],
+                                        *work_qr],
+                                inplace=True)
+
+                    qc.x(ancilla[index])
+
+                elif entry2 in known_coords:
+                    entry2_ireg = known_dict.get(entry2)
+
+                    # Flip ancilla[index] iff pair is not equal
+                    qc.compose(is_equal(nqubits_per_entry),
+                                qubits=[*(known_regs[entry1_ireg]),
+                                        *(unknown_regs[entry2_ireg]),
+                                        ancilla[index],
+                                        *work_qr],
+                                inplace=True)
+
+                    qc.x(ancilla[index])
+
+            # Increment index
+            index += 1
+
+        # At this point, we have updated all ancilla for irow.
+        # Flip row_regs[row_ireg] iff all ancilla are 1
+        qc.mcx(ancilla[:index], row_regs[row_ireg])
+
+        # Uncompute ancilla
+        # HOW?
+
+    # Column registers
+
+    # Block registers
+
+    # Uncompute ancilla
     pass
