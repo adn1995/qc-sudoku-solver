@@ -337,16 +337,17 @@ def most_likely_state(qc: QuantumCircuit, qr: QuantumRegister) -> str:
 # Basic gates and circuits
 ########################################################################
 
-def AND_gate() -> Gate:
-    """Returns a quantum gate corresponding to logical AND.
+# Might as well just use Toffoli gate
+# def AND_gate() -> Gate:
+#     """Returns a quantum gate corresponding to logical AND.
 
-    Just the Toffoli gate.
-    """
-    input_qr = QuantumRegister(2, name="in")
-    target_qr = AncillaRegister(1, name="out")
-    qc = QuantumCircuit(input_qr, target_qr, name="AND")
-    qc.ccx(input_qr[0], input_qr[1], target_qr[0])
-    return qc.to_gate()
+#     Just the Toffoli gate.
+#     """
+#     input_qr = QuantumRegister(2, name="in")
+#     target_qr = AncillaRegister(1, name="out")
+#     qc = QuantumCircuit(input_qr, target_qr, name="AND")
+#     qc.ccx(input_qr[0], input_qr[1], target_qr[0])
+#     return qc.to_gate()
 
 def NAND_gate() -> Gate:
     """Returns a quantum gate corresponding to logical NAND.
@@ -410,11 +411,11 @@ def NOR_gate() -> Gate:
     qc.x(target_qr[0])
     return qc.to_gate()
 
-def value_to_ancilla(value: int, num_qubits: int) -> Gate:
+def value_to_ancilla(value: int, nqubits: int) -> Gate:
     """Returns a quantum gate that stores the given value in the ancilla
     register.
     """
-    bitstring = int_to_bitstring(value, num_qubits)
+    bitstring = int_to_bitstring(value, nqubits)
     qr = AncillaRegister(len(bitstring), name="a")
     qc = QuantumCircuit(qr, name="Set value")
     qc.x([qr[i] for i in range(len(bitstring)) if bitstring[i] == "1"])
@@ -456,6 +457,51 @@ def prepare_known_ancilla(puzzle: np.array) -> Gate:
                 inplace=True)
             index += num_qubits_per_entry
     assert index == num_qubits
+
+    return qc.to_gate()
+
+def is_equal(nqubits: int) -> Gate:
+    """Returns a quantum gate that flips if two registers have the
+    same state.
+
+    Parameters
+    ----------
+    nqubits : int
+        Size of each of the two registers
+
+    Returns
+    -------
+    Gate
+
+    Examples
+    --------
+    #TODO
+    """
+    input_qr1 = QuantumRegister(nqubits, name="x")
+    input_qr2 = QuantumRegister(nqubits, name="y")
+    target_qr = AncillaRegister(1, name="target")
+
+    # We need to do `nqubit` comparisons, so we need that many qubits
+    ancilla = AncillaRegister(nqubits, name="a")
+
+    qc = QuantumCircuit(input_qr1, input_qr2, target_qr, ancilla)
+
+    # Store comparisons in ancilla
+    for i in range(nqubits):
+        qc.compose(XOR_gate(),
+            qubits=[input_qr1[i], input_qr2[i], ancilla[i]],
+            inplace=True)
+
+    # Flip target_qr iff all ancilla are 1
+    # We are allowed to use multi-controlled X because this function
+    # is used only in the marker oracle
+    qc.mcx(ancilla, target_qr)
+
+    # Uncompute ancilla
+    for i in range(nqubits):
+        qc.compose(XOR_gate(),
+            qubits=[input_qr1[i], input_qr2[i], ancilla[i]],
+            inplace=True)
 
     return qc.to_gate()
 
@@ -512,7 +558,8 @@ def grover(puzzle: np.array, niter: int) -> QuantumCircuit:
         name="known{}".format(i))
         for i in range(num_known)]
 
-    # Registers that flip if a sudoku rule is satisfied
+    # Rule registers
+    # Flip if a sudoku rule is satisfied
     row_regs = [AncillaRegister(1, name="row{}".format(row))
         for row in rows_with_nan]
     col_regs = [AncillaRegister(1, name="col{}".format(col))
@@ -524,6 +571,9 @@ def grover(puzzle: np.array, niter: int) -> QuantumCircuit:
     oracle_qubit = AncillaRegister(1, name="q")
 
     # Need some ancilla qubits for doing work
+    # In a row, col, or block, there are n entries
+    # We need to check at most (n choose 2) pairs of entries
+    # #TODO implement comparison
     # ancilla = AncillaRegister()
 
     #TODO prepare state with hadamard transform
