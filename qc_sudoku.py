@@ -373,11 +373,38 @@ def XOR_gate() -> Gate:
 def XNOR_gate() -> Gate:
     """Returns a quantum gate corresponding to logical XOR.
 
-    Basically XOR with an X gate at the end.
+    XOR with an X gate at the end.
     """
     input_qr = QuantumRegister(2, name="in")
     target_qr = AncillaRegister(1, name="out")
     qc = QuantumCircuit(input_qr, target_qr, name="XNOR")
+    qc.cx(input_qr[0], target_qr[0])
+    qc.cx(input_qr[1], target_qr[0])
+    qc.x(target_qr[0])
+    return qc.to_gate()
+
+def OR_gate() -> Gate:
+    """Returns a quantum gate corresponding to logical OR.
+
+    Compose AND and XOR.
+    """
+    input_qr = QuantumRegister(2, name="in")
+    target_qr = AncillaRegister(1, name="out")
+    qc = QuantumCircuit(input_qr, target_qr, name="OR")
+    qc.ccx(input_qr[0], input_qr[1], target_qr[0])
+    qc.cx(input_qr[0], target_qr[0])
+    qc.cx(input_qr[1], target_qr[0])
+    return qc.to_gate()
+
+def NOR_gate() -> Gate:
+    """Returns a quantum gate corresponding to logical NOR.
+
+    OR with an X gate at the end.
+    """
+    input_qr = QuantumRegister(2, name="in")
+    target_qr = AncillaRegister(1, name="out")
+    qc = QuantumCircuit(input_qr, target_qr, name="OR")
+    qc.ccx(input_qr[0], input_qr[1], target_qr[0])
     qc.cx(input_qr[0], target_qr[0])
     qc.cx(input_qr[1], target_qr[0])
     qc.x(target_qr[0])
