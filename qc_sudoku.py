@@ -2,8 +2,7 @@
 # author: Arthur Diep-Nguyen
 
 from qiskit.circuit import QuantumCircuit, QuantumRegister, AncillaRegister
-from qiskit.quantum_info import Statevector, Operator
-from qiskit.circuit.library import MCXGate
+from qiskit.quantum_info import Statevector
 #import matplotlib.pyplot as plt
 
 import numpy as np
@@ -190,6 +189,18 @@ def find_num_unknown(puzzle: np.array) -> int:
     """
     return np.count_nonzero(np.isnan(puzzle))
 
+def find_num_known(puzzle: np.array) -> int:
+    """Returns the number of known (i.e. filled) entries in the puzzle.
+
+    Examples
+    --------
+    >>> puzzle = np.array([[2,0,3,1], [1,np.nan,np.nan,0],
+    ...                   [0,np.nan,np.nan,np.nan],[3,np.nan,np.nan,2]])
+    >>> num_known(puzzle)
+    9
+    """
+    return np.count_nonzero(~np.isnan(puzzle))
+
 def bitstring_to_int(bitstring: str) -> int:
     """Returns the integer corresponding to a bitstring.
 
@@ -208,6 +219,87 @@ def bitstring_to_int(bitstring: str) -> int:
     420
     """
     return int(bitstring, base=2)
+
+def int_to_bitstring(value: int, num_bits: int) -> str:
+    """Returns the bitstring corresponding to an integer, padding with
+    zeros to get the desired number of bits.
+
+    Examples
+    --------
+    >>> int_to_bitstring(42, 6)
+    '101010'
+
+    >>> int_to_bitstring(42, 8)
+    '00101010'
+    """
+    bitstring = bin(value)[2:]
+    diff = num_bits - len(bitstring)
+    if diff < 0:
+        raise ValueError("`num_bits` is too low to represent `value`")
+    return bitstring.zfill(num_bits)
+
+def find_rows_with_nan(puzzle: np.array) -> set:
+    """Returns the set of row indices for rows with empty cells.
+
+    Examples
+    --------
+    >>> puzzle = np.array([[2,0,3,1], [1,np.nan,np.nan,0],
+    ...                   [0,np.nan,np.nan,np.nan],[3,np.nan,np.nan,2]])
+    >>> find_rows_with_nan(puzzle)
+    (1, 2, 3)
+    """
+    rows_with_nan = set()
+    index = 0
+    for row in puzzle:
+        if np.isnan(np.sum(row)):
+            rows_with_nan.add(index)
+        index += 1
+    assert index == puzzle.shape[0]
+    return rows_with_nan
+
+def find_cols_with_nan(puzzle: np.array) -> set:
+    """Returns the set of column indices for columns with empty cells.
+
+    Examples
+    --------
+    >>> puzzle = np.array([[2,0,3,1], [1,np.nan,np.nan,0],
+    ...                   [0,np.nan,np.nan,np.nan],[3,np.nan,np.nan,2]])
+    >>> find_cols_with_nan(puzzle)
+    (1, 2, 3)
+    """
+    cols_with_nan = set()
+    index = 0
+    for col in np.transpose(puzzle):
+        if np.isnan(np.sum(col)):
+            cols_with_nan.add(index)
+        index += 1
+    assert index == puzzle.shape[1]
+    return cols_with_nan
+
+def find_blocks_with_nan(puzzle: np.array) -> set:
+    """Returns the set of block indices for blocks with empty cells.
+
+    Examples
+    --------
+    In a 4x4 grid, we have 4 blocks, which we will index as
+        [0 1]
+        [2 3]
+
+    >>> puzzle = np.array([[2,0,3,1], [1,np.nan,np.nan,0],
+    ...                   [0,np.nan,np.nan,np.nan],[3,np.nan,np.nan,2]])
+    >>> find_blocks_with_nan(puzzle)
+    (0, 1, 2, 3)
+    """
+    blocks_with_nan = set()
+    N = puzzle.shape[0]
+    n = math.isqrt(N)
+    for i in range(N):
+        start_row = max([n*j for j in range(n) if i >= n*j])
+        start_col = n*(i-start_row)
+        grid = puzzle[start_row:start_row+n, start_col:start_col+n]
+        if np.isnan(np.sum(grid)):
+            blocks_with_nan.add(i)
+    return blocks_with_nan
 
 ########################################################################
 ########################################################################
@@ -291,38 +383,19 @@ def XNOR_gate() -> Gate:
     qc.x(target_qr[0])
     return qc.to_gate()
 
-def hadamard_transform(num_qubits: int) -> Gate:
-    """Returns the Hadamard transform on `num_qubits` qubits.
-
-    This function returns the quantum circuit that applies the Hadamard
-    transform H^{\otimes num_qubits}.
-    When the initial quantum state is all zeros, this circuit prepares
-    the state into an equal superposition (over all states in the
-    computational basis).
-
-    Parameters
-    ----------
-    num_qubits : int
-
-    Returns
-    -------
-    Gate
+def value_to_ancilla(value: int, num_qubits: int) -> Gate:
+    """Returns a quantum gate that stores the given value in the ancilla
+    register.
     """
-    quantum_register = QuantumRegister(size=num_qubits, name="x")
-    quantum_circuit = QuantumCircuit(quantum_register,
-        name="Hadamard transform")
-    quantum_circuit.h(quantum_register)
+    bitstring = int_to_bitstring(value, num_qubits)
+    qr = AncillaRegister(len(bitstring), name="a")
+    qc = QuantumCircuit(qr, name="Set value")
+    qc.x([qr[i] for i in range(len(bitstring)) if bitstring[i] == "1"])
 
-    return quantum_circuit.to_gate()
-
-def store_value(value: int) -> Gate:
-    """Returns the circuit that stores the given value in an ancilla.
-    """
-    #TODO
-    pass
+    return qc.to_gate()
 
 def prepare_known_ancilla(puzzle: np.array) -> Gate:
-    """Returns the circuit that prepares the state of the ancilla
+    """Returns a quantum gate that prepares the state of the ancilla
     registers reserved for storing the values of known values.
 
     The initial sudoku has some empty (unknown) cells and some filled
@@ -342,8 +415,22 @@ def prepare_known_ancilla(puzzle: np.array) -> Gate:
     -------
     Gate
     """
-    #TODO
-    pass
+    num_known = find_num_known(puzzle)
+    num_qubits_per_entry = find_num_qubits_per_entry(puzzle)
+    num_qubits = num_known * num_qubits_per_entry
+    qr = AncillaRegister(num_qubits, name="a")
+    qc = QuantumCircuit(qr, name="Prepare known values")
+
+    index = 0
+    for x in np.nditer(puzzle):
+        if not np.isnan(x):
+            qc.compose(value_to_ancilla(x, num_qubits_per_entry),
+                qc[index:index+num_qubits_per_entry],
+                inplace=True)
+            index += num_qubits_per_entry
+    assert index == num_qubits
+
+    return qc.to_gate()
 
 ########################################################################
 # Gates and circuits for Grover's algorithm (besides the oracle)
@@ -379,6 +466,39 @@ def grover(puzzle: np.array, niter: int) -> QuantumCircuit:
     --------
     #TODO
     """
+    # Important constants
+    num_unknown = find_num_unknown(puzzle)
+    num_known = find_num_known(puzzle)
+    num_qubits_per_entry = find_num_qubits_per_entry(puzzle)
+
+    rows_with_nan = find_rows_with_nan(puzzle)
+    cols_with_nan = find_cols_with_nan(puzzle)
+    blocks_with_nan = find_blocks_with_nan(puzzle)
+
+    # Each unknown cell gets enough qubits
+    unknown_regs = [QuantumRegister(num_qubits_per_entry,
+        name="unknown{}".format(i))
+        for i in range(num_unknown)]
+
+    # Each known cell gets enough qubits
+    known_regs = [AncillaRegister(num_qubits_per_entry,
+        name="known{}".format(i))
+        for i in range(num_known)]
+
+    # Registers that flip if a sudoku rule is satisfied
+    row_regs = [AncillaRegister(1, name="row{}".format(row))
+        for row in rows_with_nan]
+    col_regs = [AncillaRegister(1, name="col{}".format(col))
+        for col in cols_with_nan]
+    block_regs = [AncillaRegister(1, name="block{}".format(block))
+        for block in blocks_with_nan]
+
+    # Oracle qubit, which should flip if all rules are satisfied
+    oracle_qubit = AncillaRegister(1, name="q")
+
+    # Need some ancilla qubits for doing work
+    # ancilla = AncillaRegister()
+
     #TODO prepare state with hadamard transform
     #TODO loop for Grover iteration
     pass
@@ -409,9 +529,30 @@ def grover_iteration(puzzle: np.array) -> Gate:
     --------
     #TODO
     """
+    #TODO need to know how many registers I need
     #TODO marker oracle
     #TODO grover diffuser
     pass
+
+def grover_diffuser(num_qubits: int) -> Gate:
+    """Returns the Grover diffuser circuit on `num_qubits` qubits.
+    """
+    qr = QuantumRegister(num_qubits, name="x")
+    qc = QuantumCircuit(qr, name="Diffuser")
+
+    qc.h(qr)
+    qc.x(qr)
+
+    # Not sure if there is a method like qc.mcz()
+    # Multi-controlled Z is equivalent to the following
+    qc.h(qr[-1])
+    qc.mcx(qr[:-1], qr[-1])
+    qc.h(qr[-1])
+
+    qc.x(qr)
+    qc.h(qr)
+
+    return qc.to_gate()
 
 ########################################################################
 # The marker oracle
