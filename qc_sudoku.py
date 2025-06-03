@@ -50,21 +50,21 @@ def solve(puzzle: np.array) -> np.array:
         raise ValueError("Not a valid sudoku")
 
     # Important constants
-    num_qubits_per_entry = find_num_qubits_per_entry(puzzle)
+    nqubits_per_entry = find_nqubits_per_entry(puzzle)
     num_unknown = find_num_unknown(puzzle)
-    num_qubits = num_qubits_per_entry * num_unknown
-    niter = math.ceil(math.pi * math.sqrt(2**num_qubits) / 4)
+    nqubits = nqubits_per_entry * num_unknown
+    niter = math.ceil(math.pi * math.sqrt(2**nqubits) / 4)
 
     # Run Grover circuit and get output bitstring
     grover_circuit = grover(puzzle, niter)
     output_bitstring = most_likely_state(grover_circuit,
         grover_circuit.qregs[0])
-    assert len(output_bitstring) == num_qubits
+    assert len(output_bitstring) == nqubits
 
     # Convert to list of integers
-    entry_bitstrings = [output_bitstring[i:i+num_qubits_per_entry]
+    entry_bitstrings = [output_bitstring[i:i+nqubits_per_entry]
         for i in range(num_unknown)]
-    entry_ints = [bitstring_to_int(x) for x in entry_bitstrings]
+    entry_ints = [bitstr_to_int(x) for x in entry_bitstrings]
 
     # Use output bitstring to fill in the unsolved puzzle
     solution = puzzle.copy()
@@ -142,26 +142,31 @@ def possibly_sudoku(arr: np.array) -> bool:
     >>> possibly_sudoku(array6)
     True
     """
-    if not (is_square_matrix(arr) and is_square_dim(arr)):
+    if not (is_sq_matrix(arr) and is_sq_dim(arr)):
         return False
     else:
-        num_rows = arr.shape[0]
-        valid_entries = {x for x in range(num_rows)}
+        nrows = arr.shape[0]
+        valid_entries = {x for x in range(nrows)}
         for entry in np.nditer(arr):
             if entry not in valid_entries:
                 return False
         return True
 
-def is_square_matrix(arr: np.array) -> bool:
+def is_sq_matrix(arr: np.array) -> bool:
+    """Returns if an array is a square matrix.
+    """
     size = arr.size
     num_rows = math.isqrt(size)
     return (np.shape == (num_rows,num_rows))
 
-def is_square_dim(arr: np.array) -> bool:
+def is_sq_dim(arr: np.array) -> bool:
+    """Returns if an array (presumably a square matrix) has a square
+    number of rows.
+    """
     num_rows = arr.shape[0]
     return (num_rows == math.isqrt(num_rows)**2)
 
-def find_num_qubits_per_entry(puzzle: np.array) -> int:
+def find_nqubits_per_entry(puzzle: np.array) -> int:
     """Returns the number of (qu)bits needed to represent an entry.
 
     Examples
@@ -171,11 +176,11 @@ def find_num_qubits_per_entry(puzzle: np.array) -> int:
 
     >>> puzzle = np.array([[2,0,3,1], [1,np.nan,np.nan,0],
     ...                   [0,np.nan,np.nan,np.nan],[3,np.nan,np.nan,2]])
-    >>> num_qubits_per_entry(puzzle)
+    >>> nqubits_per_entry(puzzle)
     2
     """
-    num_rows = puzzle.shape[0]
-    return math.ceil(math.log2(num_rows))
+    nrows = puzzle.shape[0]
+    return math.ceil(math.log2(nrows))
 
 def find_num_unknown(puzzle: np.array) -> int:
     """Returns the number of unknown (i.e. empty) entries in the puzzle.
@@ -201,42 +206,42 @@ def find_num_known(puzzle: np.array) -> int:
     """
     return np.count_nonzero(~np.isnan(puzzle))
 
-def bitstring_to_int(bitstring: str) -> int:
+def bitstr_to_int(bitstr: str) -> int:
     """Returns the integer corresponding to a bitstring.
 
     Examples
     --------
-    >>> bitstring_to_int("101010")
+    >>> bitstr_to_int("101010")
     42
 
-    >>> bitstring_to_int("1000101")
+    >>> bitstr_to_int("1000101")
     69
 
-    >>> bitstring_to_int("110100100")
+    >>> bitstr_to_int("110100100")
     420
 
-    >>> bitstring_to_int("0000000110100100")
+    >>> bitstr_to_int("0000000110100100")
     420
     """
-    return int(bitstring, base=2)
+    return int(bitstr, base=2)
 
-def int_to_bitstring(value: int, num_bits: int) -> str:
+def int_to_bitstr(value: int, nbits: int) -> str:
     """Returns the bitstring corresponding to an integer, padding with
     zeros to get the desired number of bits.
 
     Examples
     --------
-    >>> int_to_bitstring(42, 6)
+    >>> int_to_bitstr(42, 6)
     '101010'
 
-    >>> int_to_bitstring(42, 8)
+    >>> int_to_bitstr(42, 8)
     '00101010'
     """
-    bitstring = bin(value)[2:]
-    diff = num_bits - len(bitstring)
+    bitstr = bin(value)[2:]
+    diff = nbits - len(bitstr)
     if diff < 0:
         raise ValueError("`num_bits` is too low to represent `value`")
-    return bitstring.zfill(num_bits)
+    return bitstr.zfill(nbits)
 
 def find_rows_with_nan(puzzle: np.array) -> set:
     """Returns the set of row indices for rows with empty cells.
@@ -354,21 +359,21 @@ def NAND_gate() -> Gate:
 
     Toffoli gate with an X gate at the end.
     """
-    input_qr = QuantumRegister(2, name="in")
-    target_qr = AncillaRegister(1, name="out")
-    qc = QuantumCircuit(input_qr, target_qr, name="NAND")
-    qc.ccx(input_qr[0], input_qr[1], target_qr[0])
-    qc.x(target_qr[0])
+    in_qr = QuantumRegister(2, name="in")
+    out_qr = AncillaRegister(1, name="out")
+    qc = QuantumCircuit(in_qr, out_qr, name="NAND")
+    qc.ccx(in_qr[0], in_qr[1], out_qr[0])
+    qc.x(out_qr[0])
     return qc.to_gate()
 
 def XOR_gate() -> Gate:
     """Returns a quantum gate corresponding to logical XOR.
     """
-    input_qr = QuantumRegister(2, name="in")
-    target_qr = AncillaRegister(1, name="out")
-    qc = QuantumCircuit(input_qr, target_qr, name="XOR")
-    qc.cx(input_qr[0], target_qr[0])
-    qc.cx(input_qr[1], target_qr[0])
+    in_qr = QuantumRegister(2, name="in")
+    out_qr = AncillaRegister(1, name="out")
+    qc = QuantumCircuit(in_qr, out_qr, name="XOR")
+    qc.cx(in_qr[0], out_qr[0])
+    qc.cx(in_qr[1], out_qr[0])
     return qc.to_gate()
 
 def XNOR_gate() -> Gate:
@@ -376,12 +381,12 @@ def XNOR_gate() -> Gate:
 
     XOR with an X gate at the end.
     """
-    input_qr = QuantumRegister(2, name="in")
-    target_qr = AncillaRegister(1, name="out")
-    qc = QuantumCircuit(input_qr, target_qr, name="XNOR")
-    qc.cx(input_qr[0], target_qr[0])
-    qc.cx(input_qr[1], target_qr[0])
-    qc.x(target_qr[0])
+    in_qr = QuantumRegister(2, name="in")
+    out_qr = AncillaRegister(1, name="out")
+    qc = QuantumCircuit(in_qr, out_qr, name="XNOR")
+    qc.cx(in_qr[0], out_qr[0])
+    qc.cx(in_qr[1], out_qr[0])
+    qc.x(out_qr[0])
     return qc.to_gate()
 
 def OR_gate() -> Gate:
@@ -389,12 +394,12 @@ def OR_gate() -> Gate:
 
     Compose AND and XOR.
     """
-    input_qr = QuantumRegister(2, name="in")
-    target_qr = AncillaRegister(1, name="out")
-    qc = QuantumCircuit(input_qr, target_qr, name="OR")
-    qc.ccx(input_qr[0], input_qr[1], target_qr[0])
-    qc.cx(input_qr[0], target_qr[0])
-    qc.cx(input_qr[1], target_qr[0])
+    in_qr = QuantumRegister(2, name="in")
+    out_qr = AncillaRegister(1, name="out")
+    qc = QuantumCircuit(in_qr, out_qr, name="OR")
+    qc.ccx(in_qr[0], in_qr[1], out_qr[0])
+    qc.cx(in_qr[0], out_qr[0])
+    qc.cx(in_qr[1], out_qr[0])
     return qc.to_gate()
 
 def NOR_gate() -> Gate:
@@ -415,10 +420,10 @@ def value_to_ancilla(value: int, nqubits: int) -> Gate:
     """Returns a quantum gate that stores the given value in the ancilla
     register.
     """
-    bitstring = int_to_bitstring(value, nqubits)
-    qr = AncillaRegister(len(bitstring), name="a")
+    bitstr = int_to_bitstr(value, nqubits)
+    qr = AncillaRegister(len(bitstr), name="a")
     qc = QuantumCircuit(qr, name="Set value")
-    qc.x([qr[i] for i in range(len(bitstring)) if bitstring[i] == "1"])
+    qc.x([qr[i] for i in range(len(bitstr)) if bitstr[i] == "1"])
 
     return qc.to_gate()
 
@@ -444,19 +449,19 @@ def prepare_known_ancilla(puzzle: np.array) -> Gate:
     Gate
     """
     num_known = find_num_known(puzzle)
-    num_qubits_per_entry = find_num_qubits_per_entry(puzzle)
-    num_qubits = num_known * num_qubits_per_entry
-    qr = AncillaRegister(num_qubits, name="a")
+    nqubits_per_entry = find_nqubits_per_entry(puzzle)
+    nqubits = num_known * nqubits_per_entry
+    qr = AncillaRegister(nqubits, name="a")
     qc = QuantumCircuit(qr, name="Prepare known values")
 
     index = 0
     for x in np.nditer(puzzle):
         if not np.isnan(x):
-            qc.compose(value_to_ancilla(x, num_qubits_per_entry),
-                qc[index:index+num_qubits_per_entry],
+            qc.compose(value_to_ancilla(x, nqubits_per_entry),
+                qc[index:index+nqubits_per_entry],
                 inplace=True)
-            index += num_qubits_per_entry
-    assert index == num_qubits
+            index += nqubits_per_entry
+    assert index == nqubits
 
     return qc.to_gate()
 
@@ -477,30 +482,30 @@ def is_equal(nqubits: int) -> Gate:
     --------
     #TODO
     """
-    input_qr1 = QuantumRegister(nqubits, name="x")
-    input_qr2 = QuantumRegister(nqubits, name="y")
-    target_qr = AncillaRegister(1, name="target")
+    in_qr1 = QuantumRegister(nqubits, name="x")
+    in_qr2 = QuantumRegister(nqubits, name="y")
+    out_qr = AncillaRegister(1, name="out")
 
     # We need to do `nqubit` comparisons, so we need that many qubits
     ancilla = AncillaRegister(nqubits, name="a")
 
-    qc = QuantumCircuit(input_qr1, input_qr2, target_qr, ancilla)
+    qc = QuantumCircuit(in_qr1, in_qr2, out_qr, ancilla)
 
     # Store comparisons in ancilla
     for i in range(nqubits):
         qc.compose(XOR_gate(),
-            qubits=[input_qr1[i], input_qr2[i], ancilla[i]],
+            qubits=[in_qr1[i], in_qr2[i], ancilla[i]],
             inplace=True)
 
     # Flip target_qr iff all ancilla are 1
     # We are allowed to use multi-controlled X because this function
     # is used only in the marker oracle
-    qc.mcx(ancilla, target_qr)
+    qc.mcx(ancilla, out_qr)
 
     # Uncompute ancilla
     for i in range(nqubits):
         qc.compose(XOR_gate(),
-            qubits=[input_qr1[i], input_qr2[i], ancilla[i]],
+            qubits=[in_qr1[i], in_qr2[i], ancilla[i]],
             inplace=True)
 
     return qc.to_gate()
@@ -542,19 +547,19 @@ def grover(puzzle: np.array, niter: int) -> QuantumCircuit:
     # Important constants
     num_unknown = find_num_unknown(puzzle)
     num_known = find_num_known(puzzle)
-    num_qubits_per_entry = find_num_qubits_per_entry(puzzle)
+    nqubits_per_entry = find_nqubits_per_entry(puzzle)
 
     rows_with_nan = find_rows_with_nan(puzzle)
     cols_with_nan = find_cols_with_nan(puzzle)
     blocks_with_nan = find_blocks_with_nan(puzzle)
 
     # Each unknown cell gets enough qubits
-    unknown_regs = [QuantumRegister(num_qubits_per_entry,
+    unknown_regs = [QuantumRegister(nqubits_per_entry,
         name="unknown{}".format(i))
         for i in range(num_unknown)]
 
     # Each known cell gets enough qubits
-    known_regs = [AncillaRegister(num_qubits_per_entry,
+    known_regs = [AncillaRegister(nqubits_per_entry,
         name="known{}".format(i))
         for i in range(num_known)]
 
@@ -611,10 +616,10 @@ def grover_iteration(puzzle: np.array) -> Gate:
     #TODO grover diffuser
     pass
 
-def grover_diffuser(num_qubits: int) -> Gate:
+def grover_diffuser(nqubits: int) -> Gate:
     """Returns the Grover diffuser circuit on `num_qubits` qubits.
     """
-    qr = QuantumRegister(num_qubits, name="x")
+    qr = QuantumRegister(nqubits, name="x")
     qc = QuantumCircuit(qr, name="Diffuser")
 
     qc.h(qr)
