@@ -58,6 +58,8 @@ def solve(puzzle: np.ndarray) -> np.ndarray:
 
     # Run Grover circuit and get output bitstring
     grover_circuit = grover(puzzle, niter)
+
+    # First `nqubit` registers should correspond to the empty cells
     output_bitstring = most_likely_state(grover_circuit,
                                             [i for i in range(nqubits)])
     assert len(output_bitstring) == nqubits
@@ -340,19 +342,19 @@ def most_likely_state(qc: QuantumCircuit, qargs: list) -> str:
     prob_dict = output_state.probabilities_dict(qargs)
     return max(prob_dict, key=prob_dict.get)
 
-def value_to_ancilla(value: int, nqubits: int) -> Gate:
-    """Returns a quantum gate that stores the given value in the ancilla
-    register.
+def value_to_ancilla(value: int, nqubits: int) -> QuantumCircuit:
+    """Returns a quantum circuit that stores the given value in the
+    ancilla register.
     """
     bitstr = int_to_bitstr(value, nqubits)
     qr = AncillaRegister(len(bitstr), name="a")
     qc = QuantumCircuit(qr, name="Set value")
     qc.x([qr[i] for i in range(len(bitstr)) if bitstr[i] == "1"])
 
-    return qc.to_gate()
+    return qc
 
-def prepare_known_ancilla(puzzle: np.ndarray) -> Gate:
-    """Returns a quantum gate that prepares the state of the ancilla
+def prepare_known_ancilla(puzzle: np.ndarray) -> QuantumCircuit:
+    """Returns a quantum circuit that prepares the state of the ancilla
     registers reserved for storing the values of known values.
 
     The initial sudoku has some empty (unknown) cells and some filled
@@ -370,7 +372,7 @@ def prepare_known_ancilla(puzzle: np.ndarray) -> Gate:
 
     Returns
     -------
-    Gate
+    QuantumCircuit
     """
     num_known = find_num_known(puzzle)
     nqubits_per_entry = find_nqubits_per_entry(puzzle)
@@ -387,10 +389,10 @@ def prepare_known_ancilla(puzzle: np.ndarray) -> Gate:
             index += nqubits_per_entry
     assert index == nqubits
 
-    return qc.to_gate()
+    return qc
 
-def is_equal(nqubits: int) -> Gate:
-    """Returns a quantum gate that flips if two registers have the
+def is_equal(nqubits: int) -> QuantumCircuit:
+    """Returns a quantum circuit that flips if two registers have the
     same state.
 
     Parameters
@@ -400,7 +402,7 @@ def is_equal(nqubits: int) -> Gate:
 
     Returns
     -------
-    Gate
+    QuantumCircuit
     """
     in_qr1 = QuantumRegister(nqubits, name="x")
     in_qr2 = QuantumRegister(nqubits, name="y")
@@ -428,7 +430,7 @@ def is_equal(nqubits: int) -> Gate:
                     qubits=[in_qr1[i], in_qr2[i], ancilla[i]],
                     inplace=True)
 
-    return qc.to_gate()
+    return qc
 
 def make_unknown_dict(puzzle: np.ndarray) -> dict:
     """Returns a dictionary mapping empty cells to quantum registers.
@@ -476,8 +478,8 @@ def make_known_dict(puzzle: np.ndarray) -> dict:
             for i in range(nrows) for j in range(nrows)
             if not np.isnan(puzzle)[i,j]}
 
-def is_valid_grouping(nqubits: int) -> Gate:
-    """Returns a quantum gate that checks if the grouping is valid.
+def is_valid_grouping(nqubits: int) -> QuantumCircuit:
+    """Returns a quantum circuit that checks if the grouping is valid.
 
     Let's call a row, column, or block, a "grouping" of cells.
     Given a grouping, this function flips an output register iff all
@@ -490,7 +492,7 @@ def is_valid_grouping(nqubits: int) -> Gate:
 
     Returns
     -------
-    Gate
+    QuantumCircuit
     """
     pass
 
@@ -510,8 +512,8 @@ def is_valid_grouping(nqubits: int) -> Gate:
 #     qc.ccx(input_qr[0], input_qr[1], target_qr[0])
 #     return qc.to_gate()
 
-def NAND_gate() -> Gate:
-    """Returns a quantum gate corresponding to logical NAND.
+def NAND_qc() -> QuantumCircuit:
+    """Returns a quantum circuit corresponding to logical NAND.
 
     Toffoli gate with an X gate at the end.
     """
@@ -520,20 +522,20 @@ def NAND_gate() -> Gate:
     qc = QuantumCircuit(in_qr, out_qr, name="NAND")
     qc.ccx(in_qr[0], in_qr[1], out_qr[0])
     qc.x(out_qr[0])
-    return qc.to_gate()
+    return qc
 
-def XOR_gate() -> Gate:
-    """Returns a quantum gate corresponding to logical XOR.
+def XOR_qc() -> QuantumCircuit:
+    """Returns a quantum circuit corresponding to logical XOR.
     """
     in_qr = QuantumRegister(2, name="in")
     out_qr = AncillaRegister(1, name="out")
     qc = QuantumCircuit(in_qr, out_qr, name="XOR")
     qc.cx(in_qr[0], out_qr[0])
     qc.cx(in_qr[1], out_qr[0])
-    return qc.to_gate()
+    return qc
 
-def XNOR_gate() -> Gate:
-    """Returns a quantum gate corresponding to logical XOR.
+def XNOR_qc() -> QuantumCircuit:
+    """Returns a quantum circuit corresponding to logical XOR.
 
     XOR with an X gate at the end.
     """
@@ -543,10 +545,10 @@ def XNOR_gate() -> Gate:
     qc.cx(in_qr[0], out_qr[0])
     qc.cx(in_qr[1], out_qr[0])
     qc.x(out_qr[0])
-    return qc.to_gate()
+    return qc
 
-def OR_gate() -> Gate:
-    """Returns a quantum gate corresponding to logical OR.
+def OR_qc() -> QuantumCircuit:
+    """Returns a quantum circuit corresponding to logical OR.
 
     Compose AND and XOR.
     """
@@ -556,10 +558,10 @@ def OR_gate() -> Gate:
     qc.ccx(in_qr[0], in_qr[1], out_qr[0])
     qc.cx(in_qr[0], out_qr[0])
     qc.cx(in_qr[1], out_qr[0])
-    return qc.to_gate()
+    return qc
 
-def NOR_gate() -> Gate:
-    """Returns a quantum gate corresponding to logical NOR.
+def NOR_qc() -> QuantumCircuit:
+    """Returns a quantum circuit corresponding to logical NOR.
 
     OR with an X gate at the end.
     """
@@ -570,7 +572,7 @@ def NOR_gate() -> Gate:
     qc.cx(input_qr[0], target_qr[0])
     qc.cx(input_qr[1], target_qr[0])
     qc.x(target_qr[0])
-    return qc.to_gate()
+    return qc
 
 ########################################################################
 # Gates and circuits for Grover's algorithm (besides the oracle)
@@ -599,8 +601,7 @@ def grover(puzzle: np.ndarray, niter: int) -> QuantumCircuit:
     Returns
     -------
     QuantumCircuit
-        Quantum circuit, implementing Grover's algorithm for the given
-        sudoku puzzle
+        Implements Grover's algorithm for the given sudoku puzzle
 
     Examples
     --------
@@ -664,11 +665,12 @@ def grover(puzzle: np.ndarray, niter: int) -> QuantumCircuit:
     qc.h(unknown_dict.values())
 
     # Prepare state of known_regs
-    qc.compose(prepare_known_ancilla(puzzle), known_dict.values(),
+    qc.compose(prepare_known_ancilla(puzzle).to_gate(),
+                known_dict.values(),
                 inplace=True)
 
     for i in range(niter):
-        qc.compose(grover_iteration(puzzle),
+        qc.compose(grover_iteration(puzzle).to_gate(),
                     qubits = [*unknown_dict.values(),
                                 *known_dict.values(),
                                 *col_regs,
@@ -680,7 +682,7 @@ def grover(puzzle: np.ndarray, niter: int) -> QuantumCircuit:
 
     return qc
 
-def grover_iteration(puzzle: np.ndarray) -> Gate:
+def grover_iteration(puzzle: np.ndarray) -> QuantumCircuit:
     """Returns the Grover iteration circuit for the given puzzle.
 
     This function assumes the input is an n^2 by n^2 sudoku puzzle, with
@@ -698,9 +700,8 @@ def grover_iteration(puzzle: np.ndarray) -> Gate:
 
     Returns
     -------
-    Gate
-        Quantum gate, implementing the Grover iteration for the given
-        sudoku puzzle
+    QuantumCircuit
+        Implements the Grover iteration for the given sudoku puzzle
 
     Examples
     --------
@@ -755,7 +756,7 @@ def grover_iteration(puzzle: np.ndarray) -> Gate:
                         ancilla,
                         work_qr)
 
-    qc.compose(oracle(puzzle),
+    qc.compose(oracle(puzzle).to_gate(),
                 qubits=[*unknown_regs,
                         *known_regs,
                         *row_regs,
@@ -766,13 +767,13 @@ def grover_iteration(puzzle: np.ndarray) -> Gate:
                         work_qr],
                 inplace=True)
 
-    qc.compose(grover_diffuser(num_unknown * nqubits_per_entry),
+    qc.compose(grover_diffuser(num_unknown * nqubits_per_entry).to_gate(),
                 qubits=[*unknown_regs],
                 inplace=True)
 
     return qc
 
-def grover_diffuser(nqubits: int) -> Gate:
+def grover_diffuser(nqubits: int) -> QuantumCircuit:
     """Returns the Grover diffuser circuit on `num_qubits` qubits.
     """
     qr = QuantumRegister(nqubits, name="x")
@@ -790,13 +791,13 @@ def grover_diffuser(nqubits: int) -> Gate:
     qc.x(qr)
     qc.h(qr)
 
-    return qc.to_gate()
+    return qc
 
 ########################################################################
 # The marker oracle
 ########################################################################
 
-def oracle(puzzle: np.ndarray) -> Gate:
+def oracle(puzzle: np.ndarray) -> QuantumCircuit:
     """Returns the marker oracle for the given puzzle.
 
     This function assumes the input is an n^2 by n^2 sudoku puzzle, with
@@ -815,9 +816,8 @@ def oracle(puzzle: np.ndarray) -> Gate:
 
     Returns
     -------
-    Gate
-        Quantum gate, implementing the marker oracle for the given
-        sudoku puzzle
+    QuantumCircuit
+        Implements the marker oracle for the given sudoku puzzle
 
     Examples
     --------
