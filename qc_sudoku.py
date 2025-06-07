@@ -709,23 +709,28 @@ def grover_iteration(puzzle: np.ndarray) -> QuantumCircuit:
     """
     # Important constants
     nrows = puzzle.shape[0]
-    num_unknown = find_num_unknown(puzzle)
-    num_known = find_num_known(puzzle)
+    #num_unknown = find_num_unknown(puzzle)
+    #num_known = find_num_known(puzzle)
     nqubits_per_entry = find_nqubits_per_entry(puzzle)
+
+    # Dictionaries with quantum registers for each cell in the puzzle
+    unknown_dict = make_unknown_dict(puzzle)
+    known_dict = make_known_dict(puzzle)
+    #cell_to_regs = unknown_dict | known_dict
 
     rows_with_nan = find_rows_with_nan(puzzle)
     cols_with_nan = find_cols_with_nan(puzzle)
     blocks_with_nan = find_blocks_with_nan(puzzle)
 
     # Each unknown cell gets enough qubits
-    unknown_regs = [QuantumRegister(nqubits_per_entry,
-                                    name="unknown{}".format(i))
-                    for i in range(num_unknown)]
+    #unknown_regs = [QuantumRegister(nqubits_per_entry,
+    #                                name="unknown{}".format(i))
+    #                for i in range(num_unknown)]
 
     # Each known cell gets enough qubits
-    known_regs = [AncillaRegister(nqubits_per_entry,
-                                    name="known{}".format(i))
-                    for i in range(num_known)]
+    #known_regs = [AncillaRegister(nqubits_per_entry,
+    #                                name="known{}".format(i))
+    #                for i in range(num_known)]
 
     # Rule registers
     # Flip if a sudoku rule is satisfied
@@ -747,8 +752,8 @@ def grover_iteration(puzzle: np.ndarray) -> QuantumCircuit:
     # We also need to `nqubits_per_entry` qubits for `is_equal` to work.
     work_qr = AncillaRegister(nqubits_per_entry, name="w")
 
-    qc = QuantumCircuit(*unknown_regs,
-                        *known_regs,
+    qc = QuantumCircuit(*unknown_dict.values(),
+                        *known_dict.values(),
                         *row_regs,
                         *col_regs,
                         *block_regs,
@@ -757,8 +762,8 @@ def grover_iteration(puzzle: np.ndarray) -> QuantumCircuit:
                         work_qr)
 
     qc.compose(oracle(puzzle).to_gate(),
-                qubits=[*unknown_regs,
-                        *known_regs,
+                qubits=[*unknown_dict.values(),
+                        *known_dict.values(),
                         *row_regs,
                         *col_regs,
                         *block_regs,
@@ -767,8 +772,8 @@ def grover_iteration(puzzle: np.ndarray) -> QuantumCircuit:
                         work_qr],
                 inplace=True)
 
-    qc.compose(grover_diffuser(num_unknown * nqubits_per_entry).to_gate(),
-                qubits=[*unknown_regs],
+    qc.compose(grover_diffuser(len(unknown_dict) * nqubits_per_entry).to_gate(),
+                qubits=[*unknown_dict.values()],
                 inplace=True)
 
     return qc
