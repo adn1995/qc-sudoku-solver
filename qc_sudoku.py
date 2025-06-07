@@ -401,10 +401,6 @@ def is_equal(nqubits: int) -> Gate:
     Returns
     -------
     Gate
-
-    Examples
-    --------
-    #TODO
     """
     in_qr1 = QuantumRegister(nqubits, name="x")
     in_qr2 = QuantumRegister(nqubits, name="y")
@@ -433,6 +429,70 @@ def is_equal(nqubits: int) -> Gate:
                     inplace=True)
 
     return qc.to_gate()
+
+def make_unknown_dict(puzzle: np.ndarray) -> dict:
+    """Returns a dictionary mapping empty cells to quantum registers.
+
+    Parameters
+    ----------
+    puzzle : np.ndarray
+        n^2 by n^2 array, representing the unsolved puzzle,
+        where an empty cell is np.nan
+
+    Returns
+    -------
+    dict
+        Dictionary whose keys are the coordinates of unknown cells,
+        where the corresponding values are quantum registers for storing
+        the state of those cells
+    """
+    nrows = puzzle.shape[0]
+    nqubits_per_entry = find_nqubits_per_entry(puzzle)
+    return {(i,j) : QuantumRegister(nqubits_per_entry,
+                                    name="unknown_({},{})".format(str(i),str(j)))
+            for i in range(nrows) for j in range(nrows)
+            if np.isnan(puzzle)[i,j]}
+
+def make_known_dict(puzzle: np.ndarray) -> dict:
+    """Returns a dictionary mapping filled cells to ancilla registers.
+
+    Parameters
+    ----------
+    puzzle : np.ndarray
+        n^2 by n^2 array, representing the unsolved puzzle,
+        where an empty cell is np.nan
+
+    Returns
+    -------
+    dict
+        Dictionary whose keys are the coordinates of known cells,
+        where the corresponding values are ancilla registers for storing
+        the state of those cells
+    """
+    nrows = puzzle.shape[0]
+    nqubits_per_entry = find_nqubits_per_entry(puzzle)
+    return {(i,j) : AncillaRegister(nqubits_per_entry,
+                                    name="unknown_({},{})".format(str(i),str(j)))
+            for i in range(nrows) for j in range(nrows)
+            if not np.isnan(puzzle)[i,j]}
+
+def is_valid_grouping(nqubits: int) -> Gate:
+    """Returns a quantum gate that checks if the grouping is valid.
+
+    Let's call a row, column, or block, a "grouping" of cells.
+    Given a grouping, this function flips an output register iff all
+    cells in the grouping are distinct.
+
+    Parameters
+    ----------
+    nqubits : int
+        Size of a register representing a cell
+
+    Returns
+    -------
+    Gate
+    """
+    pass
 
 ########################################################################
 # Logic gates
@@ -548,23 +608,28 @@ def grover(puzzle: np.ndarray, niter: int) -> QuantumCircuit:
     """
     # Important constants
     nrows = puzzle.shape[0]
-    num_unknown = find_num_unknown(puzzle)
-    num_known = find_num_known(puzzle)
+    #num_unknown = find_num_unknown(puzzle)
+    #num_known = find_num_known(puzzle)
     nqubits_per_entry = find_nqubits_per_entry(puzzle)
+
+    # Dictionaries with quantum registers for each cell in the puzzle
+    unknown_dict = make_unknown_dict(puzzle)
+    known_dict = make_known_dict(puzzle)
+    #cell_to_regs = unknown_dict | known_dict
 
     rows_with_nan = find_rows_with_nan(puzzle)
     cols_with_nan = find_cols_with_nan(puzzle)
     blocks_with_nan = find_blocks_with_nan(puzzle)
 
     # Each unknown cell gets enough qubits
-    unknown_regs = [QuantumRegister(nqubits_per_entry,
-                                    name="unknown{}".format(i))
-                    for i in range(num_unknown)]
+    #unknown_regs = [QuantumRegister(nqubits_per_entry,
+    #                                name="unknown{}".format(i))
+    #                for i in range(num_unknown)]
 
     # Each known cell gets enough qubits
-    known_regs = [AncillaRegister(nqubits_per_entry,
-                                    name="known{}".format(i))
-                    for i in range(num_known)]
+    #known_regs = [AncillaRegister(nqubits_per_entry,
+    #                                name="known{}".format(i))
+    #                for i in range(num_known)]
 
     # Rule registers
     # Flip if a sudoku rule is satisfied
@@ -586,8 +651,8 @@ def grover(puzzle: np.ndarray, niter: int) -> QuantumCircuit:
     # We also need to `nqubits_per_entry` qubits for `is_equal` to work.
     work_qr = AncillaRegister(nqubits_per_entry, name="w")
 
-    qc = QuantumCircuit(*unknown_regs,
-                        *known_regs,
+    qc = QuantumCircuit(*unknown_dict.values(),
+                        *known_dict.values(),
                         *row_regs,
                         *col_regs,
                         *block_regs,
@@ -596,15 +661,16 @@ def grover(puzzle: np.ndarray, niter: int) -> QuantumCircuit:
                         work_qr)
 
     # Prepare state of unknown_regs with hadamard transform
-    qc.h(unknown_regs)
+    qc.h(unknown_dict.values())
 
     # Prepare state of known_regs
-    qc.compose(prepare_known_ancilla(puzzle), known_regs, inplace=True)
+    qc.compose(prepare_known_ancilla(puzzle), known_dict.values(),
+                inplace=True)
 
     for i in range(niter):
         qc.compose(grover_iteration(puzzle),
-                    qubits = [*unknown_regs,
-                                *known_regs,
+                    qubits = [*unknown_dict.values(),
+                                *known_dict.values(),
                                 *col_regs,
                                 *block_regs,
                                 oracle_qubit,
