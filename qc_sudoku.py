@@ -381,8 +381,8 @@ def prepare_known_ancilla(puzzle: np.ndarray) -> QuantumCircuit:
     qc = QuantumCircuit(qr, name="Prepare known values")
 
     index = 0
-    for x in np.nditer(puzzle):
-        if not np.isnan(x):
+    for x in np.nditer(puzzle): #WARNING: I think I'm using nditer incorrectly
+        if not math.isnan(x):
             qc.compose(value_to_ancilla(int(x), nqubits_per_entry),
                         qc[index:index+nqubits_per_entry],
                         inplace=True)
@@ -478,17 +478,19 @@ def make_known_dict(puzzle: np.ndarray) -> dict:
             for i in range(nrows) for j in range(nrows)
             if not np.isnan(puzzle)[i,j]}
 
-def is_valid_grouping(nqubits: int) -> QuantumCircuit:
+def is_valid_group(nqubits: int, ncells: int) -> QuantumCircuit:
     """Returns a quantum circuit that checks if the grouping is valid.
 
-    Let's call a row, column, or block, a "grouping" of cells.
-    Given a grouping, this function flips an output register iff all
+    Let's call a row, column, or block, a "group" of cells.
+    Given a group, this function flips an output register iff all
     cells in the grouping are distinct.
 
     Parameters
     ----------
     nqubits : int
         Size of a register representing a cell
+    ncells : int
+        Number of cells in a group
 
     Returns
     -------
@@ -836,30 +838,32 @@ def oracle(puzzle: np.ndarray) -> QuantumCircuit:
     cols_with_nan = find_cols_with_nan(puzzle)
     blocks_with_nan = find_blocks_with_nan(puzzle)
 
-    unknown_coords = tuple([tuple(x) for x in np.argwhere(np.isnan(puzzle))])
-    known_coords = tuple([tuple(x) for x in np.argwhere(~np.isnan(puzzle))])
+    #unknown_coords = tuple([tuple(x) for x in np.argwhere(np.isnan(puzzle))])
+    #known_coords = tuple([tuple(x) for x in np.argwhere(~np.isnan(puzzle))])
 
-    unknown_dict = {unknown_coords[i]: i for i in range(len(unknown_coords))}
-    known_dict = {known_coords[i]: i for i in range(len(known_coords))}
+    # Dictionaries with quantum registers for each cell in the puzzle
+    unknown_dict = make_unknown_dict(puzzle)
+    known_dict = make_known_dict(puzzle)
+    #cell_to_regs = unknown_dict | known_dict
 
     # Each unknown cell gets enough qubits
-    unknown_regs = [QuantumRegister(nqubits_per_entry,
-                                    name="unknown{}".format(tup))
-                    for tup in unknown_coords]
+    #unknown_regs = [QuantumRegister(nqubits_per_entry,
+    #                                name="unknown{}".format(tup))
+    #                for tup in unknown_coords]
 
     # Each known cell gets enough qubits
-    known_regs = [AncillaRegister(nqubits_per_entry,
-                                    name="known{}".format(tup))
-                    for tup in known_coords]
+    #known_regs = [AncillaRegister(nqubits_per_entry,
+    #                                name="known{}".format(tup))
+    #                for tup in known_coords]
 
     # Rule registers
     # Flip if a sudoku rule is satisfied
-    row_regs = [AncillaRegister(1, name="row{}".format(row))
-                for row in rows_with_nan]
-    col_regs = [AncillaRegister(1, name="col{}".format(col))
-                for col in cols_with_nan]
-    block_regs = [AncillaRegister(1, name="block{}".format(block))
-                    for block in blocks_with_nan]
+    row_regs = {row : AncillaRegister(1, name="row{}".format(row))
+                for row in rows_with_nan}
+    col_regs = {col : AncillaRegister(1, name="col{}".format(col))
+                for col in cols_with_nan}
+    block_regs = {block : AncillaRegister(1, name="block{}".format(block))
+                    for block in blocks_with_nan}
 
     # Oracle qubit, which should flip if all rules are satisfied
     oracle_qubit = AncillaRegister(1, name="q")
@@ -872,105 +876,41 @@ def oracle(puzzle: np.ndarray) -> QuantumCircuit:
     # We also need to `nqubits_per_entry` qubits for `is_equal` to work.
     work_qr = AncillaRegister(nqubits_per_entry, name="w")
 
-    qc = QuantumCircuit(*unknown_regs,
-                        *known_regs,
-                        *row_regs,
-                        *col_regs,
-                        *block_regs,
+    qc = QuantumCircuit(*unknown_dict.values(),
+                        *known_dict.values(),
+                        *row_regs.values(),
+                        *col_regs.values(),
+                        *block_regs.values(),
                         oracle_qubit,
                         ancilla,
                         work_qr)
 
     # Row registers
 
-    # Keep track of how many ancilla registers we are using
-    index = 0
-
-    # Keep track of row register index
-    row_ireg = 0
-
-    # Look at a row index from rows_with_nan
-    for i in range(len(rows_with_nan)):
-
-        # Look at all pairs of entries in this row
-        for tup in combinations(range(nrows), 2):
-
-            # rows_with_nan tells you irow
-            # tup tells you icol
-            entry1 = (rows_with_nan[i], tup[0])
-            entry2 = (rows_with_nan[i], tup[1])
-
-            # Find corresponding registers of pair
-
-            if entry1 in unknown_coords:
-                entry1_ireg = unknown_dict.get(entry1)
-                if entry2 in unknown_coords:
-                    entry2_ireg = unknown_dict.get(entry2)
-
-                    # Flip ancilla[index] iff pair is not equal
-                    qc.compose(is_equal(nqubits_per_entry),
-                                qubits=[*(unknown_regs[entry1_ireg]),
-                                        *(unknown_regs[entry2_ireg]),
-                                        ancilla[index],
-                                        *work_qr],
-                                inplace=True)
-
-                    qc.x(ancilla[index])
-
-                elif entry2 in known_coords:
-                    entry2_ireg = known_dict.get(entry2)
-
-                    # Flip ancilla[index] iff pair is not equal
-                    qc.compose(is_equal(nqubits_per_entry),
-                                qubits=[*(unknown_regs[entry1_ireg]),
-                                        *(known_regs[entry2_ireg]),
-                                        ancilla[index],
-                                        *work_qr],
-                                inplace=True)
-
-                    qc.x(ancilla[index])
-
-            elif entry1 in known_coords:
-                entry1_ireg = known_dict.get(entry1)
-                if entry2 in unknown_coords:
-                    entry2_ireg = unknown_dict.get(entry2)
-
-                    # Flip ancilla[index] iff pair is not equal
-                    qc.compose(is_equal(nqubits_per_entry),
-                                qubits=[*(known_regs[entry1_ireg]),
-                                        *(unknown_regs[entry2_ireg]),
-                                        ancilla[index],
-                                        *work_qr],
-                                inplace=True)
-
-                    qc.x(ancilla[index])
-
-                elif entry2 in known_coords:
-                    entry2_ireg = known_dict.get(entry2)
-
-                    # Flip ancilla[index] iff pair is not equal
-                    qc.compose(is_equal(nqubits_per_entry),
-                                qubits=[*(known_regs[entry1_ireg]),
-                                        *(unknown_regs[entry2_ireg]),
-                                        ancilla[index],
-                                        *work_qr],
-                                inplace=True)
-
-                    qc.x(ancilla[index])
-
-            # Increment index
-            index += 1
-
-        # At this point, we have updated all ancilla for irow.
-        # Flip row_regs[row_ireg] iff all ancilla are 1
-        qc.mcx(ancilla[:index], row_regs[row_ireg])
-
-        # Uncompute ancilla
-        # HOW?
+    #for row in rows_with_nan:
+        #TODO keep track of which ancilla are used
+        #TODO check if row is valid, saves to ancilla
+        #TODO multicontrolled X to corresponding row register
+        #TODO uncompute ancilla
 
     # Column registers
 
+    #for col in cols_with_nan:
+        #TODO keep track of which ancilla are used
+        #TODO check if col is valid, saves to ancilla
+        #TODO multicontrolled X to corresponding col register
+        #TODO uncompute ancilla
+
     # Block registers
 
-    # Uncompute ancilla
-    pass
+    #for block in blocks_with_nan:
+        #TODO keep track of which ancilla are used
+        #TODO check if block is valid, saves to ancilla
+        #TODO multicontrolled X to corresponding block register
+        #TODO uncompute ancilla
+
+    #TODO multicontrolled X to oracle_qubit
+
+    #TODO uncompute row_regs, col_regs, block_regs (HOW)
+
+    return qc
