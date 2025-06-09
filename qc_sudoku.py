@@ -457,7 +457,7 @@ def is_equal(nqubits: int) -> QuantumCircuit:
     # We need to do `nqubit` comparisons, so we need that many qubits
     ancilla = AncillaRegister(nqubits, name="a")
 
-    qc = QuantumCircuit(in_qr1, in_qr2, out_qr, ancilla)
+    qc = QuantumCircuit(in_qr1, in_qr2, out_qr, ancilla, name="Is equal")
 
     # Store comparisons in ancilla
     for i in range(nqubits):
@@ -496,7 +496,38 @@ def is_valid_group(nqubits: int, ncells: int) -> QuantumCircuit:
     -------
     QuantumCircuit
     """
-    pass
+    cell_regs = [QuantumRegister(nqubits, name="cell{}".format(str(i)))
+                    for i in range(ncells)]
+    ancilla_dict = {(i,j): AncillaRegister(1, name="a({},{})".format(str(i),str(j)))
+                    for (i,j) in combinations(range(ncells),2)}
+    work_qr = QuantumRegister(nqubits, name="w")
+    out_qr = AncillaRegister(1, name="out")
+
+    qc = QuantumCircuit(*cell_regs, *ancilla_dict.values(), work_qr, out_qr,
+                        name="Is valid group")
+
+    for (i,j) in list(combinations(range(ncells),2)):
+        qc.compose(is_equal(nqubits),
+                    qubits=[*(cell_regs[i]),
+                            *(cell_regs[j]),
+                            ancilla_dict.get((i,j)),
+                            work_qr],
+                    inplace=True)
+
+    # Flip out_qr iff all ancilla are flipped
+    qc.mcx(control_qubits=list(ancilla_dict.values()),
+            target_qubit=out_qr)
+
+    # Uncompute ancilla
+    for (i,j) in list(combinations(range(ncells),2)):
+        qc.compose(is_equal(nqubits),
+                    qubits=[*(cell_regs[i]),
+                            *(cell_regs[j]),
+                            ancilla_dict.get((i,j)),
+                            work_qr],
+                    inplace=True)
+
+    return qc
 
 ########################################################################
 # Logic gates
@@ -661,7 +692,8 @@ def grover(puzzle: np.ndarray, niter: int) -> QuantumCircuit:
                         *block_regs,
                         oracle_qubit,
                         ancilla,
-                        work_qr)
+                        work_qr,
+                        name="Grover circuit")
 
     # Prepare state of unknown_regs with hadamard transform
     qc.h(unknown_dict.values())
@@ -761,7 +793,8 @@ def grover_iteration(puzzle: np.ndarray) -> QuantumCircuit:
                         *block_regs,
                         oracle_qubit,
                         ancilla,
-                        work_qr)
+                        work_qr,
+                        name="Grover iteration")
 
     qc.compose(oracle(puzzle).to_gate(),
                 qubits=[*unknown_dict.values(),
@@ -883,7 +916,8 @@ def oracle(puzzle: np.ndarray) -> QuantumCircuit:
                         *block_regs.values(),
                         oracle_qubit,
                         ancilla,
-                        work_qr)
+                        work_qr,
+                        name="Oracle")
 
     # Subcircuit for checking values
     # Compute the inverse later to uncompute row, col, and block regs
