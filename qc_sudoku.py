@@ -309,6 +309,52 @@ def find_blocks_with_nan(puzzle: np.ndarray) -> tuple:
             blocks_with_nan.append(i)
     return tuple(blocks_with_nan)
 
+def make_unknown_dict(puzzle: np.ndarray) -> dict:
+    """Returns a dictionary mapping empty cells to quantum registers.
+
+    Parameters
+    ----------
+    puzzle : np.ndarray
+        n^2 by n^2 array, representing the unsolved puzzle,
+        where an empty cell is np.nan
+
+    Returns
+    -------
+    dict
+        Dictionary whose keys are the coordinates of unknown cells,
+        where the corresponding values are quantum registers for storing
+        the state of those cells
+    """
+    nrows = puzzle.shape[0]
+    nqubits_per_entry = find_nqubits_per_entry(puzzle)
+    return {(i,j) : QuantumRegister(nqubits_per_entry,
+                                    name="unknown_({},{})".format(str(i),str(j)))
+            for i in range(nrows) for j in range(nrows)
+            if np.isnan(puzzle)[i,j]}
+
+def make_known_dict(puzzle: np.ndarray) -> dict:
+    """Returns a dictionary mapping filled cells to ancilla registers.
+
+    Parameters
+    ----------
+    puzzle : np.ndarray
+        n^2 by n^2 array, representing the unsolved puzzle,
+        where an empty cell is np.nan
+
+    Returns
+    -------
+    dict
+        Dictionary whose keys are the coordinates of known cells,
+        where the corresponding values are ancilla registers for storing
+        the state of those cells
+    """
+    nrows = puzzle.shape[0]
+    nqubits_per_entry = find_nqubits_per_entry(puzzle)
+    return {(i,j) : AncillaRegister(nqubits_per_entry,
+                                    name="unknown_({},{})".format(str(i),str(j)))
+            for i in range(nrows) for j in range(nrows)
+            if not np.isnan(puzzle)[i,j]}
+
 ########################################################################
 ########################################################################
 # Quantum helper functions
@@ -431,52 +477,6 @@ def is_equal(nqubits: int) -> QuantumCircuit:
                     inplace=True)
 
     return qc
-
-def make_unknown_dict(puzzle: np.ndarray) -> dict:
-    """Returns a dictionary mapping empty cells to quantum registers.
-
-    Parameters
-    ----------
-    puzzle : np.ndarray
-        n^2 by n^2 array, representing the unsolved puzzle,
-        where an empty cell is np.nan
-
-    Returns
-    -------
-    dict
-        Dictionary whose keys are the coordinates of unknown cells,
-        where the corresponding values are quantum registers for storing
-        the state of those cells
-    """
-    nrows = puzzle.shape[0]
-    nqubits_per_entry = find_nqubits_per_entry(puzzle)
-    return {(i,j) : QuantumRegister(nqubits_per_entry,
-                                    name="unknown_({},{})".format(str(i),str(j)))
-            for i in range(nrows) for j in range(nrows)
-            if np.isnan(puzzle)[i,j]}
-
-def make_known_dict(puzzle: np.ndarray) -> dict:
-    """Returns a dictionary mapping filled cells to ancilla registers.
-
-    Parameters
-    ----------
-    puzzle : np.ndarray
-        n^2 by n^2 array, representing the unsolved puzzle,
-        where an empty cell is np.nan
-
-    Returns
-    -------
-    dict
-        Dictionary whose keys are the coordinates of known cells,
-        where the corresponding values are ancilla registers for storing
-        the state of those cells
-    """
-    nrows = puzzle.shape[0]
-    nqubits_per_entry = find_nqubits_per_entry(puzzle)
-    return {(i,j) : AncillaRegister(nqubits_per_entry,
-                                    name="unknown_({},{})".format(str(i),str(j)))
-            for i in range(nrows) for j in range(nrows)
-            if not np.isnan(puzzle)[i,j]}
 
 def is_valid_group(nqubits: int, ncells: int) -> QuantumCircuit:
     """Returns a quantum circuit that checks if the grouping is valid.
@@ -884,6 +884,10 @@ def oracle(puzzle: np.ndarray) -> QuantumCircuit:
                         oracle_qubit,
                         ancilla,
                         work_qr)
+
+    # Subcircuit for checking values
+    # Compute the inverse later to uncompute row, col, and block regs
+    check_qc = qc.copy()
 
     # Row registers
 
