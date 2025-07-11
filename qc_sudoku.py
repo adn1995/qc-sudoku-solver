@@ -391,6 +391,10 @@ def value_to_ancilla(value: int, nqubits: int) -> QuantumCircuit:
     bitstr = int_to_bitstr(value, nqubits)
     qr = AncillaRegister(len(bitstr), name="a")
     qc = QuantumCircuit(qr, name="Set value")
+
+    # Note that higher index in the register means more significant
+    # so we need to reverse the bitstring
+    bitstr = bitstr[::-1]
     qc.x([qr[i] for i in range(len(bitstr)) if bitstr[i] == "1"])
 
     return qc
