@@ -379,10 +379,6 @@ def most_likely_state(qc: QuantumCircuit, qargs: list) -> str:
     -------
     str
         Binary representation of the most likely basis vector as a str
-
-    Examples
-    --------
-    #TODO
     """
     output_state = Statevector(qc)
     prob_dict = output_state.probabilities_dict(qargs)
@@ -635,10 +631,6 @@ def grover(puzzle: np.ndarray, niter: int) -> QuantumCircuit:
     -------
     QuantumCircuit
         Implements Grover's algorithm for the given sudoku puzzle
-
-    Examples
-    --------
-    #TODO
     """
     # Important constants
     nrows = puzzle.shape[0]
@@ -736,10 +728,6 @@ def grover_iteration(puzzle: np.ndarray) -> QuantumCircuit:
     -------
     QuantumCircuit
         Implements the Grover iteration for the given sudoku puzzle
-
-    Examples
-    --------
-    #TODO
     """
     # Important constants
     nrows = puzzle.shape[0]
@@ -858,10 +846,6 @@ def oracle(puzzle: np.ndarray) -> QuantumCircuit:
     -------
     QuantumCircuit
         Implements the marker oracle for the given sudoku puzzle
-
-    Examples
-    --------
-    #TODO
     """
     # Important constants
     nrows = puzzle.shape[0]
