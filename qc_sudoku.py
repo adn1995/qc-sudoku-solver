@@ -895,50 +895,59 @@ def oracle(puzzle: np.ndarray) -> QuantumCircuit:
     # Row registers
     for row in rows_with_nan:
         cell_coords = [(row, col) for col in range(nrows)]
+        #print(cell_coords)
         cell_regs = [cell_to_regs.get(coord) for coord in cell_coords]
+        #print(cell_regs)
+        cell_qubits = []
+        for reg in cell_regs:
+            cell_qubits.extend([*reg])
+        #print(cell_qubits)
         check_qc.compose(is_valid_group(nqubits_per_entry,nrows).to_gate(),
-                            qubits=[*cell_regs,
-                                    ancilla,
-                                    work_qr,
-                                    row_regs.get(row)],
+                            qubits=[*cell_qubits,
+                                    *ancilla,
+                                    *work_qr,
+                                    *(row_regs.get(row))],
                             inplace=True)
+        #print("row {}: success".format(row))
 
     # Column registers
     for col in cols_with_nan:
         cell_coords = [(row, col) for row in range(nrows)]
         cell_regs = [cell_to_regs.get(coord) for coord in cell_coords]
+        cell_qubits = []
+        for reg in cell_regs:
+            cell_qubits.extend([*reg])
         check_qc.compose(is_valid_group(nqubits_per_entry,nrows).to_gate(),
-                            qubits=[*cell_regs,
-                                    ancilla,
-                                    work_qr,
-                                    col_regs.get(col)],
+                            qubits=[*cell_qubits,
+                                    *ancilla,
+                                    *work_qr,
+                                    *(col_regs.get(col))],
                             inplace=True)
 
     # Block registers
     for block in blocks_with_nan:
-        cell_coords = [(n*(block // n + i), n*(block % n + j))
+        cell_coords = [(n*(block // n)+i, n*(block % n)+j)
                         for i
                         in range(n)
                         for j
                         in range(n)]
+        print(cell_coords)
         cell_regs = [cell_to_regs.get(coord) for coord in cell_coords]
+        print(cell_regs)
+        cell_qubits = []
+        for reg in cell_regs:
+            cell_qubits.extend([*reg])
+        print(cell_qubits)
         check_qc.compose(is_valid_group(nqubits_per_entry,nrows).to_gate(),
-                            qubits=[*cell_regs,
-                                    ancilla,
-                                    work_qr,
-                                    block_regs.get(block)],
+                            qubits=[*cell_qubits,
+                                    *ancilla,
+                                    *work_qr,
+                                    *block_regs.get(block)],
                             inplace=True)
+        print("block {}: success".format("block"))
 
     # Compose checks to oracle circuit
     qc.compose(check_qc.to_gate(),
-                qubits=[*unknown_dict.values(),
-                        *known_dict.values(),
-                        *row_regs.values(),
-                        *col_regs.values(),
-                        *block_regs.values(),
-                        oracle_qubit,
-                        ancilla,
-                        work_qr],
                 inplace=True)
 
     # Multicontrolled X to oracle_qubit
@@ -949,14 +958,6 @@ def oracle(puzzle: np.ndarray) -> QuantumCircuit:
 
     # Uncompute row_regs, col_regs, block_regs using check_qc.inverse()
     qc.compose(check_qc.inverse().to_gate(),
-                qubits=[*unknown_dict.values(),
-                        *known_dict.values(),
-                        *row_regs.values(),
-                        *col_regs.values(),
-                        *block_regs.values(),
-                        oracle_qubit,
-                        ancilla,
-                        work_qr],
                 inplace=True)
 
     return qc
