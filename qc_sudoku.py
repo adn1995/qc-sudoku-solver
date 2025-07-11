@@ -461,7 +461,7 @@ def is_equal(nqubits: int) -> QuantumCircuit:
 
     # Store comparisons in ancilla
     for i in range(nqubits):
-        qc.compose(XOR_gate(),
+        qc.compose(XOR_qc().to_gate(),
                     qubits=[in_qr1[i], in_qr2[i], ancilla[i]],
                     inplace=True)
 
@@ -472,7 +472,7 @@ def is_equal(nqubits: int) -> QuantumCircuit:
 
     # Uncompute ancilla
     for i in range(nqubits):
-        qc.compose(XOR_gate(),
+        qc.compose(XOR_qc().to_gate(),
                     qubits=[in_qr1[i], in_qr2[i], ancilla[i]],
                     inplace=True)
 
