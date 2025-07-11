@@ -687,22 +687,21 @@ def grover(puzzle: np.ndarray, niter: int) -> QuantumCircuit:
                         name="Grover circuit")
 
     # Prepare state of unknown_regs with hadamard transform
-    qc.h(unknown_dict.values())
+    unknown_qubits = []
+    for reg in unknown_dict.values():
+        unknown_qubits.extend([*reg])
+    qc.h(unknown_qubits)
 
     # Prepare state of known_regs
+    known_qubits = []
+    for reg in known_dict.values():
+        known_qubits.extend([*reg])
     qc.compose(prepare_known_ancilla(puzzle).to_gate(),
-                known_dict.values(),
+                known_qubits,
                 inplace=True)
 
     for i in range(niter):
         qc.compose(grover_iteration(puzzle).to_gate(),
-                    qubits = [*unknown_dict.values(),
-                                *known_dict.values(),
-                                *col_regs,
-                                *block_regs,
-                                oracle_qubit,
-                                ancilla,
-                                work_qr],
                     inplace=True)
 
     return qc
