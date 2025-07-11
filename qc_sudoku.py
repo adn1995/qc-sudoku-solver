@@ -926,20 +926,20 @@ def oracle(puzzle: np.ndarray) -> QuantumCircuit:
                         in range(n)
                         for j
                         in range(n)]
-        print(cell_coords)
+        #print(cell_coords)
         cell_regs = [cell_to_regs.get(coord) for coord in cell_coords]
-        print(cell_regs)
+        #print(cell_regs)
         cell_qubits = []
         for reg in cell_regs:
             cell_qubits.extend([*reg])
-        print(cell_qubits)
+        #print(cell_qubits)
         check_qc.compose(is_valid_group(nqubits_per_entry,nrows).to_gate(),
                             qubits=[*cell_qubits,
                                     *ancilla,
                                     *work_qr,
                                     *block_regs.get(block)],
                             inplace=True)
-        print("block {}: success".format("block"))
+        #print("block {}: success".format("block"))
 
     # Compose checks to oracle circuit
     qc.compose(check_qc.to_gate(),
