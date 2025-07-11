@@ -774,18 +774,13 @@ def grover_iteration(puzzle: np.ndarray) -> QuantumCircuit:
                         name="Grover iteration")
 
     qc.compose(oracle(puzzle).to_gate(),
-                qubits=[*unknown_dict.values(),
-                        *known_dict.values(),
-                        *row_regs,
-                        *col_regs,
-                        *block_regs,
-                        oracle_qubit,
-                        ancilla,
-                        work_qr],
                 inplace=True)
 
+    unknown_qubits = []
+    for reg in unknown_dict.values():
+        unknown_qubits.extend([*reg])
     qc.compose(grover_diffuser(len(unknown_dict) * nqubits_per_entry).to_gate(),
-                qubits=[*unknown_dict.values()],
+                unknown_qubits,
                 inplace=True)
 
     return qc
