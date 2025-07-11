@@ -351,7 +351,7 @@ def make_known_dict(puzzle: np.ndarray) -> dict:
     nrows = puzzle.shape[0]
     nqubits_per_entry = find_nqubits_per_entry(puzzle)
     return {(i,j) : AncillaRegister(nqubits_per_entry,
-                                    name="unknown_({},{})".format(str(i),str(j)))
+                                    name="known_({},{})".format(str(i),str(j)))
             for i in range(nrows) for j in range(nrows)
             if not np.isnan(puzzle)[i,j]}
 
