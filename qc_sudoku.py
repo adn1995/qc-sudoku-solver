@@ -388,16 +388,23 @@ def value_to_ancilla(value: int, nqubits: int) -> QuantumCircuit:
     """Returns a quantum circuit that stores the given value in the
     ancilla register.
     """
-    bitstr = int_to_bitstr(value, nqubits)
-    qr = AncillaRegister(len(bitstr), name="a")
+    qr = AncillaRegister(nqubits, name="a")
     qc = QuantumCircuit(qr, name="Set value")
 
-    # Note that higher index in the register means more significant
-    # so we need to reverse the bitstring
-    bitstr = bitstr[::-1]
-    qc.x([qr[i] for i in range(len(bitstr)) if bitstr[i] == "1"])
+    # If value == 0, we want an empty gate
+    if value == 0:
+        return qc
+    else:
+        bitstr = int_to_bitstr(value, nqubits)
+        assert len(bitstr) == nqubits
 
-    return qc
+        # Note that higher index in the register means more significant
+        # so we need to reverse the bitstring
+        bitstr = bitstr[::-1]
+
+        qc.x([qr[i] for i in range(len(bitstr)) if bitstr[i] == "1"])
+
+        return qc
 
 def prepare_known_ancilla(puzzle: np.ndarray) -> QuantumCircuit:
     """Returns a quantum circuit that prepares the state of the ancilla
@@ -430,7 +437,7 @@ def prepare_known_ancilla(puzzle: np.ndarray) -> QuantumCircuit:
     for x in np.nditer(puzzle): #WARNING: I think I'm using nditer incorrectly
         if not math.isnan(x):
             qc.compose(value_to_ancilla(int(x), nqubits_per_entry),
-                        qc[index:index+nqubits_per_entry],
+                        qr[index:index+nqubits_per_entry],
                         inplace=True)
             index += nqubits_per_entry
     assert index == nqubits
