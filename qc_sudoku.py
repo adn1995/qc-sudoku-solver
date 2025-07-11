@@ -514,11 +514,11 @@ def is_valid_group(nqubits: int, ncells: int) -> QuantumCircuit:
                         name="Is valid group")
 
     for (i,j) in list(combinations(range(ncells),2)):
-        qc.compose(is_equal(nqubits),
+        qc.compose(is_equal(nqubits).to_gate(),
                     qubits=[*(cell_regs[i]),
                             *(cell_regs[j]),
-                            ancilla_dict.get((i,j)),
-                            work_qr],
+                            *(ancilla_dict.get((i,j))),
+                            *work_qr],
                     inplace=True)
 
     # Flip out_qr iff all ancilla are flipped
@@ -527,11 +527,11 @@ def is_valid_group(nqubits: int, ncells: int) -> QuantumCircuit:
 
     # Uncompute ancilla
     for (i,j) in list(combinations(range(ncells),2)):
-        qc.compose(is_equal(nqubits),
+        qc.compose(is_equal(nqubits).to_gate(),
                     qubits=[*(cell_regs[i]),
                             *(cell_regs[j]),
-                            ancilla_dict.get((i,j)),
-                            work_qr],
+                            *(ancilla_dict.get((i,j))),
+                            *work_qr],
                     inplace=True)
 
     return qc
