@@ -149,18 +149,15 @@ def possibly_sudoku(arr: np.ndarray) -> bool:
         return False
     else:
         nrows = arr.shape[0]
-        valid_entries = {x for x in range(nrows)}
-        for entry in np.nditer(arr):
-            if entry not in valid_entries:
-                return False
-        return True
+        arr_nums = np.nan_to_num(arr) # Turn nans to zeros
+        return np.all((arr_nums >= 0) | (arr_nums < nrows))
 
 def is_sq_matrix(arr: np.ndarray) -> bool:
     """Returns if an array is a square matrix.
     """
     size = arr.size
     nrows = math.isqrt(size)
-    return (np.shape == (nrows,nrows))
+    return (arr.shape == (nrows,nrows))
 
 def is_sq_dim(arr: np.ndarray) -> bool:
     """Returns if an array (presumably a square matrix) has a square
