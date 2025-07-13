@@ -3,7 +3,6 @@
 
 from qiskit.circuit import QuantumCircuit, QuantumRegister, AncillaRegister
 from qiskit.quantum_info import Statevector
-#import matplotlib.pyplot as plt
 
 import numpy as np
 import math
@@ -243,7 +242,7 @@ def int_to_bitstr(value: int, nbits: int) -> str:
         raise ValueError("`num_bits` is too low to represent `value`")
     return bitstr.zfill(nbits)
 
-def find_rows_with_nan(puzzle: np.ndarray) -> tuple:
+def find_rows_with_nan(puzzle: np.ndarray) -> tuple[int, ...]:
     """Returns the tuple of row indices for rows with empty cells.
 
     Examples
@@ -262,7 +261,7 @@ def find_rows_with_nan(puzzle: np.ndarray) -> tuple:
     assert index == puzzle.shape[0]
     return tuple(rows_with_nan)
 
-def find_cols_with_nan(puzzle: np.ndarray) -> tuple:
+def find_cols_with_nan(puzzle: np.ndarray) -> tuple[int, ...]:
     """Returns the tuple of column indices for columns with empty cells.
 
     Examples
@@ -281,7 +280,7 @@ def find_cols_with_nan(puzzle: np.ndarray) -> tuple:
     assert index == puzzle.shape[1]
     return tuple(cols_with_nan)
 
-def find_blocks_with_nan(puzzle: np.ndarray) -> tuple:
+def find_blocks_with_nan(puzzle: np.ndarray) -> tuple[int, ...]:
     """Returns the tuple of block indices for blocks with empty cells.
 
     Examples
@@ -306,7 +305,7 @@ def find_blocks_with_nan(puzzle: np.ndarray) -> tuple:
             blocks_with_nan.append(i)
     return tuple(blocks_with_nan)
 
-def make_unknown_dict(puzzle: np.ndarray) -> dict:
+def make_unknown_dict(puzzle: np.ndarray) -> dict[tuple[int, int], QuantumRegister]:
     """Returns a dictionary mapping empty cells to quantum registers.
 
     Parameters
@@ -384,6 +383,13 @@ def most_likely_state(qc: QuantumCircuit, qargs: list) -> str:
 def value_to_ancilla(value: int, nqubits: int) -> QuantumCircuit:
     """Returns a quantum circuit that stores the given value in the
     ancilla register.
+
+    Parameters
+    ----------
+    value : int
+        Value to be stored
+    nqubits : int
+        Size of the register where the value will be stored
     """
     qr = AncillaRegister(nqubits, name="a")
     qc = QuantumCircuit(qr, name="Set value")
@@ -431,7 +437,7 @@ def prepare_known_ancilla(puzzle: np.ndarray) -> QuantumCircuit:
     qc = QuantumCircuit(qr, name="Prepare known values")
 
     index = 0
-    for x in np.nditer(puzzle): #WARNING: I think I'm using nditer incorrectly
+    for x in np.nditer(puzzle):
         if not math.isnan(x):
             qc.compose(value_to_ancilla(int(x), nqubits_per_entry),
                         qr[index:index+nqubits_per_entry],
@@ -442,13 +448,13 @@ def prepare_known_ancilla(puzzle: np.ndarray) -> QuantumCircuit:
     return qc
 
 def is_equal(nqubits: int) -> QuantumCircuit:
-    """Returns a quantum circuit that flips if two registers have the
-    same state.
+    """Returns a quantum circuit that flips an output qubit if two input
+    registers have the same state.
 
     Parameters
     ----------
     nqubits : int
-        Size of each of the two registers
+        Size of each of the two input registers
 
     Returns
     -------
@@ -469,7 +475,7 @@ def is_equal(nqubits: int) -> QuantumCircuit:
                     qubits=[in_qr1[i], in_qr2[i], work_qr[i]],
                     inplace=True)
 
-    # Flip target_qr iff all ancilla are 1
+    # Flip target_qr iff all work ancilla are 1
     # We are allowed to use multi-controlled X because this function
     # is used only in the marker oracle
     qc.mcx(work_qr, out_qr)
@@ -482,7 +488,14 @@ def is_equal(nqubits: int) -> QuantumCircuit:
 
     return qc
 
-def is_valid_group(nqubits: int, ncells: int) -> QuantumCircuit:
+def is_valid_group(group: np.ndarray,
+                    nqubits_per_entry: int,
+                    unknown_regs: tuple[QuantumRegister, ...],
+                    known_qr: AncillaRegister,
+                    group_qr: AncillaRegister,
+                    check_qr: AncillaRegister,
+                    work_qr: AncillaRegister
+    ) -> QuantumCircuit:
     """Returns a quantum circuit that checks if the grouping is valid.
 
     Let's call a row, column, or block, a "group" of cells.
@@ -491,45 +504,112 @@ def is_valid_group(nqubits: int, ncells: int) -> QuantumCircuit:
 
     Parameters
     ----------
-    nqubits : int
-        Size of a register representing a cell
-    ncells : int
-        Number of cells in a group
+    group : np.ndarray
+        Row, column, or block of the puzzle
+    nqubits_per_entry : int
+        Number of qubits needed to represent a single cell of the puzzle
+    unknown_regs : tuple[QuantumRegister, ...]
+        Each QuantumRegister corresponds to an unknown cell in `group`
+    known_qr : AncillaRegister
+        Used for preparing state of filled cell
+    group_qr : AncillaRegister
+        Stores rule violations for the given group
+    check_qr : AncillaRegister
+        Used for storing results of equality checks
+    work_qr : AncillaRegister
+        Used for computing equality checks
 
     Returns
     -------
     QuantumCircuit
     """
-    cell_regs = [QuantumRegister(nqubits, name="cell{}".format(str(i)))
-                    for i in range(ncells)]
-    ancilla_dict = {(i,j): AncillaRegister(1, name="a({},{})".format(str(i),str(j)))
-                    for (i,j) in combinations(range(ncells),2)}
-    work_qr = QuantumRegister(nqubits, name="w")
-    out_qr = AncillaRegister(1, name="out")
+    ncells = len(group)
 
-    qc = QuantumCircuit(*cell_regs, *ancilla_dict.values(), work_qr, out_qr,
+    qc = QuantumCircuit(*unknown_regs,
+                        known_qr,
+                        group_qr,
+                        check_qr,
+                        work_qr,
                         name="Is valid group")
 
-    for (i,j) in list(combinations(range(ncells),2)):
-        qc.compose(is_equal(nqubits).to_gate(),
-                    qubits=[*(cell_regs[i]),
-                            *(cell_regs[j]),
-                            *(ancilla_dict.get((i,j))),
-                            *work_qr],
-                    inplace=True)
+    check_qc = QuantumCircuit(*unknown_regs,
+                        known_qr,
+                        group_qr,
+                        check_qr,
+                        work_qr,
+                        name="Check equalities")
 
-    # Flip out_qr iff all ancilla are flipped
-    qc.mcx(control_qubits=list(ancilla_dict.values()),
-            target_qubit=out_qr)
+    # Use check_qr to store results of equality checks
+    check_index = 0
+    for (i,j) in combinations(range(ncells),2):
 
-    # Uncompute ancilla
-    for (i,j) in list(combinations(range(ncells),2)):
-        qc.compose(is_equal(nqubits).to_gate(),
-                    qubits=[*(cell_regs[i]),
-                            *(cell_regs[j]),
-                            *(ancilla_dict.get((i,j))),
-                            *work_qr],
-                    inplace=True)
+        # If both cells are empty, compare them to each other
+        if math.isnan(group[i]) and math.isnan(group[j]):
+            check_qc.compose(is_equal(nqubits_per_entry),
+                                qubits=[*unknown_regs[i],
+                                        *unknown_regs[j],
+                                        check_qr[check_index],
+                                        *work_qr],
+                                inplace=True)
+
+        # If first cell is empty and second cell is known,
+        # then prepare known_qr with the second cell, then compare
+        elif math.isnan(group[i]):
+
+            # Prepare known_qr
+            check_qc.compose(value_to_ancilla(group[j], nqubits_per_entry),
+                                known_qr,
+                                inplace=True)
+
+            # Check equality
+            check_qc.compose(is_equal(nqubits_per_entry),
+                                qubits=[*unknown_regs[i],
+                                        *known_qr,
+                                        check_qr[check_index],
+                                        *work_qr],
+                                inplace=True)
+
+            # Unprepare known_qr
+            # Notice that value_to_ancilla is its own inverse
+            check_qc.compose(value_to_ancilla(group[j], nqubits_per_entry),
+                                known_qr,
+                                inplace=True)
+        # If second cell is empty and first cell is known,
+        # then prepare known_qr with the first cell, then compare
+        elif math.isnan(group[j]):
+            # Prepare known_qr
+            check_qc.compose(value_to_ancilla(group[i], nqubits_per_entry),
+                                known_qr,
+                                inplace=True)
+
+            # Check equality
+            check_qc.compose(is_equal(nqubits_per_entry),
+                                qubits=[*unknown_regs[j],
+                                        *known_qr,
+                                        check_qr[check_index],
+                                        *work_qr],
+                                inplace=True)
+
+            # Unprepare known_qr
+            # Notice that value_to_ancilla is its own inverse
+            check_qc.compose(value_to_ancilla(group[i], nqubits_per_entry),
+                                known_qr,
+                                inplace=True)
+        # If both cells are known, then we don't need to do anything
+        check_index += 1
+
+    assert check_index == math.comb(ncells,2)
+    qc.compose(check_qc, inplace=True)
+
+    # Flip group_qr iff all qubits in check_qr are flipped
+    qc.mcx(control_qubits=check_qr,
+            target_qubit=group_qr)
+
+    # Uncompute check_qr ancilla
+    # Notice that is_equal and value_to_ancilla are their own inverses
+    # so we need only compose check_qc
+    # but let's compose check_qc.inverse() just in case
+    qc.compose(check_qc.inverse(), inplace=True)
 
     return qc
 
@@ -644,10 +724,11 @@ def grover(puzzle: np.ndarray, niter: int) -> QuantumCircuit:
     nrows = puzzle.shape[0]
     nqubits_per_entry = find_nqubits_per_entry(puzzle)
 
-    # Dictionaries with quantum registers for each cell in the puzzle
+    # Dictionary with quantum registers for each unknown cell
     unknown_dict = make_unknown_dict(puzzle)
-    known_dict = make_known_dict(puzzle)
-    #cell_to_regs = unknown_dict | known_dict
+
+    # Register where state of known cells are prepared
+    known_qr = AncillaRegister(nqubits_per_entry, name="known")
 
     rows_with_nan = find_rows_with_nan(puzzle)
     cols_with_nan = find_cols_with_nan(puzzle)
@@ -655,61 +736,81 @@ def grover(puzzle: np.ndarray, niter: int) -> QuantumCircuit:
 
     # Rule registers
     # Flip if a sudoku rule is satisfied
-    row_regs = [AncillaRegister(1, name="row{}".format(row))
-                for row in rows_with_nan]
-    col_regs = [AncillaRegister(1, name="col{}".format(col))
-                for col in cols_with_nan]
-    block_regs = [AncillaRegister(1, name="block{}".format(block))
-                    for block in blocks_with_nan]
+    row_regs = {row : AncillaRegister(1, name="row{}".format(row))
+                for row in rows_with_nan}
+    col_regs = {col : AncillaRegister(1, name="col{}".format(col))
+                for col in cols_with_nan}
+    block_regs = {block : AncillaRegister(1, name="block{}".format(block))
+                    for block in blocks_with_nan}
 
     # Oracle qubit, which should flip if all rules are satisfied
-    oracle_qubit = AncillaRegister(1, name="q")
+    oracle_qr = AncillaRegister(1, name="oracle")
 
     # In a row, col, or block, there are `nrows` entries.
     # We need to check at most (nrows choose 2) pairs of entries and store
     # the results in (nrows choose 2) ancilla.
-    ancilla = AncillaRegister(math.comb(nrows, 2), name="a")
+    check_qr = AncillaRegister(math.comb(nrows, 2), name="check")
 
     # We also need to `nqubits_per_entry` qubits for `is_equal` to work.
-    work_qr = AncillaRegister(nqubits_per_entry, name="w")
+    work_qr = AncillaRegister(nqubits_per_entry, name="work")
 
     qc = QuantumCircuit(*unknown_dict.values(),
-                        *known_dict.values(),
-                        *row_regs,
-                        *col_regs,
-                        *block_regs,
-                        oracle_qubit,
-                        ancilla,
+                        known_qr,
+                        *row_regs.values(),
+                        *col_regs.values(),
+                        *block_regs.values(),
+                        oracle_qr,
+                        check_qr,
                         work_qr,
                         name="Grover circuit")
 
-    # Prepare state of unknown_regs with hadamard transform
-    unknown_qubits = []
+    # Prepare state of unknown_regs with Hadamard transform
     for reg in unknown_dict.values():
-        unknown_qubits.extend([*reg])
-    qc.h(unknown_qubits)
+        qc.h(reg)
 
-    # Prepare state of known_regs
-    known_qubits = []
-    for reg in known_dict.values():
-        known_qubits.extend([*reg])
-    qc.compose(prepare_known_ancilla(puzzle).to_gate(),
-                known_qubits,
-                inplace=True)
+    # Prepare oracle qubit into the "minus" state
+    #   (|0> - |1>)/sqrt(2)
+    qc.h(oracle_qr)
+    qc.z(oracle_qr)
 
+    # Prepare check_qr to the all-ones state
+    # When the oracle checks a grouping, it first assumes that no rules
+    # are violated, i.e. check_qr is in the all-ones state.
+    # A rule violation will cause a qubit of check_qr to flip to zero.
+    # If at least one of these qubits is zero, then the MCX gate
+    # controlled by check_qr will not flip the register for the grouping.
+    qc.x(check_qr)
+
+    # Do Grover iterations
     for i in range(niter):
-        qc.compose(grover_iteration(puzzle).to_gate(),
+        qc.compose(grover_iteration(puzzle=puzzle,
+                                    nrows=nrows,
+                                    nqubits_per_entry=nqubits_per_entry,
+                                    unknown_dict=unknown_dict,
+                                    known_qr=known_qr,
+                                    row_regs=row_regs,
+                                    col_regs=col_regs,
+                                    block_regs=block_regs,
+                                    oracle_qr=oracle_qr,
+                                    check_qr=check_qr,
+                                    work_qr=work_qr).to_gate(),
                     inplace=True)
 
     return qc
 
-def grover_iteration(puzzle: np.ndarray) -> QuantumCircuit:
-    """Returns the Grover iteration circuit for the given puzzle.
-
-    This function assumes the input is an n^2 by n^2 sudoku puzzle, with
-    entries in the range [0, n^2-1], with a unique solution.
-    The output is the corresponding quantum circuit implementing the
-    Grover iteration, consisting of the oracle and diffuser.
+def grover_iteration(puzzle: np.ndarray,
+                    nrows: int,
+                    nqubits_per_entry: int,
+                    unknown_dict: dict[tuple[int, int], QuantumRegister],
+                    known_qr: AncillaRegister,
+                    row_regs: dict[int, AncillaRegister],
+                    col_regs: dict[int, AncillaRegister],
+                    block_regs: dict[int, AncillaRegister],
+                    oracle_qr: AncillaRegister,
+                    check_qr: AncillaRegister,
+                    work_qr: AncillaRegister
+    ) -> QuantumCircuit:
+    """Returns the Grover iteration circuit for the given parameters.
 
     #TODO Rewrite to deal with zero or multiple solutions
 
@@ -718,64 +819,60 @@ def grover_iteration(puzzle: np.ndarray) -> QuantumCircuit:
     puzzle : np.ndarray
         n^2 by n^2 array, representing the unsolved puzzle,
         where an empty cell is np.nan
+    nrows : int
+        Number of rows in the puzzle
+    nqubits_per_entry : int
+        Number of qubits needed to represent a single cell of the puzzle
+    unknown_dict : dict[tuple[int, int], QuantumRegister]
+        Maps coordinates of an empty cell to a QuantumRegister
+    known_qr : AncillaRegister
+        Used for preparing state of filled cell
+    row_regs : dict[int, AncillaRegister]
+        Maps row index to a register for storing rule violations
+    col_regs : dict[int, AncillaRegister]
+        Maps col index to a register for storing rule violations
+    block_regs : dict[int, AncillaRegister]
+        Maps block index to a register for storing rule violations
+    oracle_qr : AncillaRegister
+        Oracle qubit, which flips when all sudoku rules are satisfied
+    check_qr : AncillaRegister
+        Used for storing results of equality checks
+    work_qr : AncillaRegister
+        Used for computing equality checks
 
     Returns
     -------
     QuantumCircuit
         Implements the Grover iteration for the given sudoku puzzle
     """
-    # Important constants
-    nrows = puzzle.shape[0]
-    #num_unknown = find_num_unknown(puzzle)
-    #num_known = find_num_known(puzzle)
-    nqubits_per_entry = find_nqubits_per_entry(puzzle)
-
-    # Dictionaries with quantum registers for each cell in the puzzle
-    unknown_dict = make_unknown_dict(puzzle)
-    known_dict = make_known_dict(puzzle)
-    #cell_to_regs = unknown_dict | known_dict
-
-    rows_with_nan = find_rows_with_nan(puzzle)
-    cols_with_nan = find_cols_with_nan(puzzle)
-    blocks_with_nan = find_blocks_with_nan(puzzle)
-
-    # Rule registers
-    # Flip if a sudoku rule is satisfied
-    row_regs = [AncillaRegister(1, name="row{}".format(row))
-                for row in rows_with_nan]
-    col_regs = [AncillaRegister(1, name="col{}".format(col))
-                for col in cols_with_nan]
-    block_regs = [AncillaRegister(1, name="block{}".format(block))
-                    for block in blocks_with_nan]
-
-    # Oracle qubit, which should flip if all rules are satisfied
-    oracle_qubit = AncillaRegister(1, name="q")
-
-    # In a row, col, or block, there are `nrows` entries.
-    # We need to check at most (nrows choose 2) pairs of entries and store
-    # the results in (nrows choose 2) ancilla.
-    ancilla = AncillaRegister(math.comb(nrows, 2), name="a")
-
-    # We also need to `nqubits_per_entry` qubits for `is_equal` to work.
-    work_qr = AncillaRegister(nqubits_per_entry, name="w")
 
     qc = QuantumCircuit(*unknown_dict.values(),
-                        *known_dict.values(),
-                        *row_regs,
-                        *col_regs,
-                        *block_regs,
-                        oracle_qubit,
-                        ancilla,
+                        known_qr,
+                        *row_regs.values(),
+                        *col_regs.values(),
+                        *block_regs.values(),
+                        oracle_qr,
+                        check_qr,
                         work_qr,
                         name="Grover iteration")
 
-    qc.compose(oracle(puzzle).to_gate(),
+    qc.compose(oracle(puzzle=puzzle,
+                        nrows=nrows,
+                        nqubits_per_entry=nqubits_per_entry,
+                        unknown_dict=unknown_dict,
+                        known_qr=known_qr,
+                        row_regs=row_regs,
+                        col_regs=col_regs,
+                        block_regs=block_regs,
+                        oracle_qr=oracle_qr,
+                        check_qr=check_qr,
+                        work_qr=work_qr).to_gate(),
                 inplace=True)
 
     unknown_qubits = []
     for reg in unknown_dict.values():
         unknown_qubits.extend([*reg])
-    qc.compose(grover_diffuser(len(unknown_dict) * nqubits_per_entry).to_gate(),
+    qc.compose(grover_diffuser(len(unknown_qubits)).to_gate(),
                 unknown_qubits,
                 inplace=True)
 
@@ -783,6 +880,9 @@ def grover_iteration(puzzle: np.ndarray) -> QuantumCircuit:
 
 def grover_diffuser(nqubits: int) -> QuantumCircuit:
     """Returns the Grover diffuser circuit on `nqubits` qubits.
+
+    This circuit is used to perform a conditional phase shift on the
+    registers corresponding to unknown cells of the puzzle.
     """
     qr = QuantumRegister(nqubits, name="x")
     qc = QuantumCircuit(qr, name="Diffuser")
@@ -805,11 +905,22 @@ def grover_diffuser(nqubits: int) -> QuantumCircuit:
 # The marker oracle
 ########################################################################
 
-def oracle(puzzle: np.ndarray) -> QuantumCircuit:
-    """Returns the marker oracle for the given puzzle.
+def oracle(puzzle: np.ndarray,
+            nrows: int,
+            nqubits_per_entry: int,
+            unknown_dict: dict[tuple[int, int], QuantumRegister],
+            known_qr: AncillaRegister,
+            row_regs: dict[int, AncillaRegister],
+            col_regs: dict[int, AncillaRegister],
+            block_regs: dict[int, AncillaRegister],
+            oracle_qr: AncillaRegister,
+            check_qr: AncillaRegister,
+            work_qr: AncillaRegister) -> QuantumCircuit:
+    """Returns the marker oracle for the given parameters.
 
-    This function assumes the input is an n^2 by n^2 sudoku puzzle, with
-    entries in the range [0, n^2-1], with a unique solution.
+    This function assumes that the parameters correspond to an n^2 by
+    n^2 sudoku puzzle, with entries in the range [0, n^2-1], with a
+    unique solution.
     The output is the corresponding quantum circuit implementing the
     marker oracle, which flips the oracle qubit if and only if it sees a
     valid solution to the puzzle.
@@ -821,121 +932,151 @@ def oracle(puzzle: np.ndarray) -> QuantumCircuit:
     puzzle : np.ndarray
         n^2 by n^2 array, representing the unsolved puzzle,
         where an empty cell is np.nan
+    nrows : int
+        Number of rows in the puzzle
+    nqubits_per_entry : int
+        Number of qubits needed to represent a single cell of the puzzle
+    unknown_dict : dict[tuple[int, int], QuantumRegister]
+        Maps coordinates of an empty cell to a QuantumRegister
+    known_qr : AncillaRegister
+        Used for preparing state of filled cell
+    row_regs : dict[int, AncillaRegister]
+        Maps row index to a register for storing rule violations
+    col_regs : dict[int, AncillaRegister]
+        Maps col index to a register for storing rule violations
+    block_regs : dict[int, AncillaRegister]
+        Maps block index to a register for storing rule violations
+    oracle_qr : AncillaRegister
+        Oracle qubit, which flips when all sudoku rules are satisfied
+    check_qr : AncillaRegister
+        Used for storing results of equality checks
+    work_qr : AncillaRegister
+        Used for computing equality checks
 
     Returns
     -------
     QuantumCircuit
         Implements the marker oracle for the given sudoku puzzle
     """
-    # Important constants
-    nrows = puzzle.shape[0]
     n = math.isqrt(nrows)
-    nqubits_per_entry = find_nqubits_per_entry(puzzle)
-
-    rows_with_nan = find_rows_with_nan(puzzle)
-    cols_with_nan = find_cols_with_nan(puzzle)
-    blocks_with_nan = find_blocks_with_nan(puzzle)
-
-    # Dictionaries with quantum registers for each cell in the puzzle
-    unknown_dict = make_unknown_dict(puzzle)
-    known_dict = make_known_dict(puzzle)
-    cell_to_regs = unknown_dict | known_dict
-
-    # Rule registers
-    # Flip if a sudoku rule is satisfied
-    row_regs = {row : AncillaRegister(1, name="row{}".format(row))
-                for row in rows_with_nan}
-    col_regs = {col : AncillaRegister(1, name="col{}".format(col))
-                for col in cols_with_nan}
-    block_regs = {block : AncillaRegister(1, name="block{}".format(block))
-                    for block in blocks_with_nan}
-
-    # Oracle qubit, which should flip if all rules are satisfied
-    oracle_qubit = AncillaRegister(1, name="q")
-
-    # In a row, col, or block, there are `nrows` entries.
-    # We need to check at most (nrows choose 2) pairs of entries and store
-    # the results in (nrows choose 2) ancilla.
-    ancilla = AncillaRegister(math.comb(nrows, 2), name="a")
-
-    # We also need to `nqubits_per_entry` qubits for `is_equal` to work.
-    work_qr = AncillaRegister(nqubits_per_entry, name="w")
 
     qc = QuantumCircuit(*unknown_dict.values(),
-                        *known_dict.values(),
+                        known_qr,
                         *row_regs.values(),
                         *col_regs.values(),
                         *block_regs.values(),
-                        oracle_qubit,
-                        ancilla,
+                        oracle_qr,
+                        check_qr,
                         work_qr,
                         name="Oracle")
 
-    # Subcircuit for checking values
+    # Subcircuit for checking all groupings for rule violations
     # Compute the inverse later to uncompute row, col, and block regs
     check_qc = QuantumCircuit(*unknown_dict.values(),
-                        *known_dict.values(),
-                        *row_regs.values(),
-                        *col_regs.values(),
-                        *block_regs.values(),
-                        oracle_qubit,
-                        ancilla,
-                        work_qr,
-                        name="Check rules")
+                                known_qr,
+                                *row_regs.values(),
+                                *col_regs.values(),
+                                *block_regs.values(),
+                                oracle_qr,
+                                check_qr,
+                                work_qr,
+                                name="Check rules")
 
     # Row registers
-    for row in rows_with_nan:
-        cell_coords = [(row, col) for col in range(nrows)]
-        #print(cell_coords)
-        cell_regs = [cell_to_regs.get(coord) for coord in cell_coords]
-        #print(cell_regs)
-        cell_qubits = []
-        for reg in cell_regs:
-            cell_qubits.extend([*reg])
-        #print(cell_qubits)
-        check_qc.compose(is_valid_group(nqubits_per_entry,nrows).to_gate(),
-                            qubits=[*cell_qubits,
-                                    *ancilla,
-                                    *work_qr,
-                                    *(row_regs.get(row))],
-                            inplace=True)
-        #print("row {}: success".format(row))
+    for row in row_regs:
+
+        unknown_regs = []
+        unknown_qubits = []
+
+        for col in range(nrows):
+            if (row,col) in unknown_dict:
+                reg = unknown_dict.get((row,col))
+                unknown_regs.append(reg)
+                unknown_qubits.extend([*reg])
+        unknown_regs = tuple(unknown_regs)
+
+        group_qr = row_regs.get(row)
+
+        check_qc.compose(is_valid_group(group=puzzle[row,:],
+                                        nqubits_per_entry=nqubits_per_entry,
+                                        unknown_regs=unknown_regs,
+                                        known_qr=known_qr,
+                                        group_qr=group_qr,
+                                        check_qr=check_qr,
+                                        work_qr=work_qr),
+                        qubits=[*unknown_qubits,
+                                *known_qr,
+                                *group_qr,
+                                *check_qr,
+                                *work_qr],
+                        inplace=True)
 
     # Column registers
-    for col in cols_with_nan:
-        cell_coords = [(row, col) for row in range(nrows)]
-        cell_regs = [cell_to_regs.get(coord) for coord in cell_coords]
-        cell_qubits = []
-        for reg in cell_regs:
-            cell_qubits.extend([*reg])
-        check_qc.compose(is_valid_group(nqubits_per_entry,nrows).to_gate(),
-                            qubits=[*cell_qubits,
-                                    *ancilla,
-                                    *work_qr,
-                                    *(col_regs.get(col))],
-                            inplace=True)
+    for col in col_regs:
+
+        unknown_regs = []
+        unknown_qubits = []
+
+        for row in range(nrows):
+            if (row,col) in unknown_dict:
+                reg = unknown_dict.get((row,col))
+                unknown_regs.append(reg)
+                unknown_qubits.extend([*reg])
+        unknown_regs = tuple(unknown_regs)
+
+        group_qr = col_regs.get(col)
+
+        check_qc.compose(is_valid_group(group=puzzle[:,col],
+                                        nqubits_per_entry=nqubits_per_entry,
+                                        unknown_regs=unknown_regs,
+                                        known_qr=known_qr,
+                                        group_qr=group_qr,
+                                        check_qr=check_qr,
+                                        work_qr=work_qr),
+                        qubits=[*unknown_qubits,
+                                *known_qr,
+                                *group_qr,
+                                *check_qr,
+                                *work_qr],
+                        inplace=True)
 
     # Block registers
-    for block in blocks_with_nan:
+    for block in block_regs:
+
+        unknown_regs = []
+        unknown_qubits = []
+
         cell_coords = [(n*(block // n)+i, n*(block % n)+j)
                         for i
                         in range(n)
                         for j
                         in range(n)]
-        #print(cell_coords)
-        cell_regs = [cell_to_regs.get(coord) for coord in cell_coords]
-        #print(cell_regs)
-        cell_qubits = []
-        for reg in cell_regs:
-            cell_qubits.extend([*reg])
-        #print(cell_qubits)
-        check_qc.compose(is_valid_group(nqubits_per_entry,nrows).to_gate(),
-                            qubits=[*cell_qubits,
-                                    *ancilla,
-                                    *work_qr,
-                                    *block_regs.get(block)],
-                            inplace=True)
-        #print("block {}: success".format("block"))
+
+        for coord in cell_coords:
+            if coord in unknown_dict:
+                reg = unknown_dict.get(coord)
+                unknown_regs.append(reg)
+                unknown_qubits.extend([*reg])
+        unknown_regs = tuple(unknown_regs)
+
+        group_qr = block_regs.get(block)
+        group = puzzle[n*(block // n) : n*(block // n) + n,
+                        n*(block % n) : n*(block % n) + n]
+        group = group.flatten()
+
+        check_qc.compose(is_valid_group(group=group,
+                                        nqubits_per_entry=nqubits_per_entry,
+                                        unknown_regs=unknown_regs,
+                                        known_qr=known_qr,
+                                        group_qr=group_qr,
+                                        check_qr=check_qr,
+                                        work_qr=work_qr),
+                        qubits=[*unknown_qubits,
+                                *known_qr,
+                                *group_qr,
+                                *check_qr,
+                                *work_qr],
+                        inplace=True)
 
     # Compose checks to oracle circuit
     qc.compose(check_qc.to_gate(),
@@ -945,7 +1086,7 @@ def oracle(puzzle: np.ndarray) -> QuantumCircuit:
     qc.mcx(control_qubits=[*row_regs.values(),
                             *col_regs.values(),
                             *block_regs.values()],
-            target_qubit=oracle_qubit)
+            target_qubit=oracle_qr)
 
     # Uncompute row_regs, col_regs, block_regs using check_qc.inverse()
     qc.compose(check_qc.inverse().to_gate(),
