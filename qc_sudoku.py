@@ -324,7 +324,7 @@ def make_unknown_dict(puzzle: np.ndarray) -> dict[tuple[int, int], QuantumRegist
     nrows = puzzle.shape[0]
     nqubits_per_entry = find_nqubits_per_entry(puzzle)
     return {(i,j) : QuantumRegister(nqubits_per_entry,
-                                    name="unknown_({},{})".format(str(i),str(j)))
+                                    name="unknown_({},{})".format(i,j))
             for i in range(nrows) for j in range(nrows)
             if np.isnan(puzzle)[i,j]}
 
@@ -347,7 +347,7 @@ def make_known_dict(puzzle: np.ndarray) -> dict:
     nrows = puzzle.shape[0]
     nqubits_per_entry = find_nqubits_per_entry(puzzle)
     return {(i,j) : AncillaRegister(nqubits_per_entry,
-                                    name="known_({},{})".format(str(i),str(j)))
+                                    name="known_({},{})".format(i,j))
             for i in range(nrows) for j in range(nrows)
             if not np.isnan(puzzle)[i,j]}
 
@@ -541,13 +541,25 @@ def is_valid_group(group: np.ndarray,
 
     # Use check_qr to store results of equality checks
     check_index = 0
+
+    # Map indices to unknown_regs
+    assert np.count_nonzero(np.isnan(group)) == len(unknown_regs)
+    index_to_reg = dict()
+    unknown_count = 0
+    for i in range(len(group)):
+        if math.isnan(group[i]):
+            index_to_reg.update({i: unknown_regs[unknown_count]})
+            unknown_count += 1
+    assert unknown_count == len(unknown_regs)
+    assert len(index_to_reg) == len(unknown_regs)
+
     for (i,j) in combinations(range(ncells),2):
 
         # If both cells are empty, compare them to each other
         if math.isnan(group[i]) and math.isnan(group[j]):
-            check_qc.compose(is_equal(nqubits_per_entry),
-                                qubits=[*unknown_regs[i],
-                                        *unknown_regs[j],
+            check_qc.compose(is_equal(nqubits_per_entry).to_gate(),
+                                qubits=[*index_to_reg.get(i),
+                                        *index_to_reg.get(j),
                                         check_qr[check_index],
                                         *work_qr],
                                 inplace=True)
@@ -557,13 +569,15 @@ def is_valid_group(group: np.ndarray,
         elif math.isnan(group[i]):
 
             # Prepare known_qr
-            check_qc.compose(value_to_ancilla(group[j], nqubits_per_entry),
+            check_qc.compose(value_to_ancilla(int(group[j]),
+                                                nqubits_per_entry
+                                                ).to_gate(),
                                 known_qr,
                                 inplace=True)
 
             # Check equality
-            check_qc.compose(is_equal(nqubits_per_entry),
-                                qubits=[*unknown_regs[i],
+            check_qc.compose(is_equal(nqubits_per_entry).to_gate(),
+                                qubits=[*index_to_reg.get(i),
                                         *known_qr,
                                         check_qr[check_index],
                                         *work_qr],
@@ -571,20 +585,24 @@ def is_valid_group(group: np.ndarray,
 
             # Unprepare known_qr
             # Notice that value_to_ancilla is its own inverse
-            check_qc.compose(value_to_ancilla(group[j], nqubits_per_entry),
+            check_qc.compose(value_to_ancilla(int(group[j]),
+                                                nqubits_per_entry
+                                                ).to_gate(),
                                 known_qr,
                                 inplace=True)
         # If second cell is empty and first cell is known,
         # then prepare known_qr with the first cell, then compare
         elif math.isnan(group[j]):
             # Prepare known_qr
-            check_qc.compose(value_to_ancilla(group[i], nqubits_per_entry),
+            check_qc.compose(value_to_ancilla(int(group[i]),
+                                                nqubits_per_entry
+                                                ).to_gate(),
                                 known_qr,
                                 inplace=True)
 
             # Check equality
-            check_qc.compose(is_equal(nqubits_per_entry),
-                                qubits=[*unknown_regs[j],
+            check_qc.compose(is_equal(nqubits_per_entry).to_gate(),
+                                qubits=[*index_to_reg.get(j),
                                         *known_qr,
                                         check_qr[check_index],
                                         *work_qr],
@@ -592,7 +610,9 @@ def is_valid_group(group: np.ndarray,
 
             # Unprepare known_qr
             # Notice that value_to_ancilla is its own inverse
-            check_qc.compose(value_to_ancilla(group[i], nqubits_per_entry),
+            check_qc.compose(value_to_ancilla(int(group[i]),
+                                                nqubits_per_entry
+                                                ).to_gate(),
                                 known_qr,
                                 inplace=True)
         # If both cells are known, then we don't need to do anything
