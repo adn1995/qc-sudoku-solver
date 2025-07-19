@@ -57,11 +57,14 @@ def solve(puzzle: np.ndarray) -> np.ndarray:
 
     # Run Grover circuit and get output bitstring
     grover_circuit = grover(puzzle, niter)
+    #print("Grover circuit obtained")
 
+    #print("Getting output bitstring")
     # First `nqubit` registers should correspond to the empty cells
     output_bitstring = most_likely_state(grover_circuit,
                                             [i for i in range(nqubits)])
     assert len(output_bitstring) == nqubits
+    #print("Output bitstring obtained")
 
     # Convert to list of integers
     entry_bitstrings = [output_bitstring[i:i+nqubits_per_entry]
@@ -376,8 +379,11 @@ def most_likely_state(qc: QuantumCircuit, qargs: list) -> str:
     str
         Binary representation of the most likely basis vector as a str
     """
+    #print("Attempting to obtain statevector")
     output_state = Statevector(qc)
+    #print("statevector obtained")
     prob_dict = output_state.probabilities_dict(qargs)
+    #print("probability dictionary obtained")
     return max(prob_dict, key=prob_dict.get)
 
 def value_to_ancilla(value: int, nqubits: int) -> QuantumCircuit:
@@ -816,6 +822,7 @@ def grover(puzzle: np.ndarray, niter: int) -> QuantumCircuit:
                                     work_qr=work_qr).to_gate(),
                     inplace=True)
 
+    #print("grover success")
     return qc
 
 def grover_iteration(puzzle: np.ndarray,
@@ -896,6 +903,7 @@ def grover_iteration(puzzle: np.ndarray,
                 unknown_qubits,
                 inplace=True)
 
+    #print("grover iteration success")
     return qc
 
 def grover_diffuser(nqubits: int) -> QuantumCircuit:
@@ -919,6 +927,7 @@ def grover_diffuser(nqubits: int) -> QuantumCircuit:
     qc.x(qr)
     qc.h(qr)
 
+    #print("diffuser success")
     return qc
 
 ########################################################################
@@ -1112,4 +1121,5 @@ def oracle(puzzle: np.ndarray,
     qc.compose(check_qc.inverse().to_gate(),
                 inplace=True)
 
+    #print("oracle success")
     return qc
