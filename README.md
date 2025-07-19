@@ -23,7 +23,7 @@ circuits.
 This repo has two important files.
 
 - [`qc_sudoku.py`](https://github.com/adn1995/qc-sudoku-solver/blob/main/qc_sudoku.py) contains the source code for my circuits
-- [`qc-sudoku-solver.ipynb`](https://github.com/adn1995/qc-sudoku-solver/blob/main/qc-sudoku-solver.ipynb) explains the circuits using a $4 \times 4$ puzzle as an example
+- [`qc-sudoku-solver.ipynb`](https://github.com/adn1995/qc-sudoku-solver/blob/main/qc-sudoku-solver.ipynb) explains the circuits, using a $4 \times 4$ puzzle as an example
 
 In the Jupyter notebook `qc-sudoku-solver.ipynb`, you will find explanations of
 my implementations of various subroutines.
@@ -34,8 +34,8 @@ my implementations of various subroutines.
 - Subcircuit for checking if a "group" (row, column, or block) satisfies the rules of sudoku
 
 You will also find explanations of how these subroutines are combined in a
-quantum circuit that takes an input puzzle and outputs a quantum state
-representation a valid solution of the puzzle.
+quantum circuit that takes an unsolved puzzle and outputs a quantum state
+representing a valid solution of the puzzle.
 
 ## References
 
